@@ -28,6 +28,7 @@ struct VMemInfo {
 #if ASMJIT_OS_WINDOWS
   HANDLE hCurrentProcess;                //!< Handle of the current process (Windows).
 #endif // ASMJIT_OS_WINDOWS
+
   size_t pageSize;                       //!< Virtual memory page size.
   size_t pageGranularity;                //!< Virtual memory page granularity.
 };
@@ -54,7 +55,7 @@ struct VMemInfo {
 //! benchmarking purposes. It's similar to Windows-only `GetTickCount()`, but
 //! it's cross-platform and tries to be the most reliable platform specific
 //! calls to make the result usable.
-struct OSUtils {
+namespace OSUtils {
   // --------------------------------------------------------------------------
   // [Virtual Memory]
   // --------------------------------------------------------------------------
@@ -65,27 +66,26 @@ struct OSUtils {
     kVMExecutable = 0x00000002U          //!< Virtual memory is executable.
   };
 
-  ASMJIT_API static VMemInfo getVirtualMemoryInfo() noexcept;
+  ASMJIT_API VMemInfo getVirtualMemoryInfo() noexcept;
 
   //! Allocate virtual memory.
-  ASMJIT_API static void* allocVirtualMemory(size_t size, size_t* allocated, uint32_t flags) noexcept;
+  ASMJIT_API void* allocVirtualMemory(size_t size, size_t* allocated, uint32_t flags) noexcept;
   //! Release virtual memory previously allocated by \ref allocVirtualMemory().
-  ASMJIT_API static Error releaseVirtualMemory(void* p, size_t size) noexcept;
+  ASMJIT_API Error releaseVirtualMemory(void* p, size_t size) noexcept;
 
 #if ASMJIT_OS_WINDOWS
   //! Allocate virtual memory of `hProcess` (Windows).
-  ASMJIT_API static void* allocProcessMemory(HANDLE hProcess, size_t size, size_t* allocated, uint32_t flags) noexcept;
-
+  ASMJIT_API void* allocProcessMemory(HANDLE hProcess, size_t size, size_t* allocated, uint32_t flags) noexcept;
   //! Release virtual memory of `hProcess` (Windows).
-  ASMJIT_API static Error releaseProcessMemory(HANDLE hProcess, void* p, size_t size) noexcept;
-#endif // ASMJIT_OS_WINDOWS
+  ASMJIT_API Error releaseProcessMemory(HANDLE hProcess, void* p, size_t size) noexcept;
+#endif
 
   // --------------------------------------------------------------------------
   // [GetTickCount]
   // --------------------------------------------------------------------------
 
   //! Get the current CPU tick count, used for benchmarking (1ms resolution).
-  ASMJIT_API static uint32_t getTickCount() noexcept;
+  ASMJIT_API uint32_t getTickCount() noexcept;
 };
 
 // ============================================================================
@@ -114,7 +114,7 @@ struct Lock {
   ASMJIT_INLINE void lock() noexcept { EnterCriticalSection(&_handle); }
   //! Unlock.
   ASMJIT_INLINE void unlock() noexcept { LeaveCriticalSection(&_handle); }
-#endif // ASMJIT_OS_WINDOWS
+#endif
 
   // --------------------------------------------------------------------------
   // [Posix]
@@ -132,7 +132,7 @@ struct Lock {
   ASMJIT_INLINE void lock() noexcept { pthread_mutex_lock(&_handle); }
   //! Unlock.
   ASMJIT_INLINE void unlock() noexcept { pthread_mutex_unlock(&_handle); }
-#endif // ASMJIT_OS_POSIX
+#endif
 
   // --------------------------------------------------------------------------
   // [Members]

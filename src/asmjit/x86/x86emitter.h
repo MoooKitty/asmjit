@@ -10,6 +10,7 @@
 
 // [Dependencies]
 #include "../base/codeemitter.h"
+#include "../base/intutils.h"
 #include "../x86/x86inst.h"
 #include "../x86/x86operand.h"
 
@@ -35,10 +36,10 @@ namespace asmjit {
 
 #define ASMJIT_INST_1i(NAME, ID, T0) \
   ASMJIT_INLINE Error NAME(const T0& o0) { return ASMJIT_EMIT(X86Inst::kId##ID, o0); } \
-  ASMJIT_INLINE Error NAME(int o0) { return ASMJIT_EMIT(X86Inst::kId##ID, Utils::asInt(o0)); } \
-  ASMJIT_INLINE Error NAME(unsigned int o0) { return ASMJIT_EMIT(X86Inst::kId##ID, Utils::asInt(o0)); } \
-  ASMJIT_INLINE Error NAME(int64_t o0) { return ASMJIT_EMIT(X86Inst::kId##ID, Utils::asInt(o0)); } \
-  ASMJIT_INLINE Error NAME(uint64_t o0) { return ASMJIT_EMIT(X86Inst::kId##ID, Utils::asInt(o0)); }
+  ASMJIT_INLINE Error NAME(int o0) { return ASMJIT_EMIT(X86Inst::kId##ID, IntUtils::asInt(o0)); } \
+  ASMJIT_INLINE Error NAME(unsigned int o0) { return ASMJIT_EMIT(X86Inst::kId##ID, IntUtils::asInt(o0)); } \
+  ASMJIT_INLINE Error NAME(int64_t o0) { return ASMJIT_EMIT(X86Inst::kId##ID, IntUtils::asInt(o0)); } \
+  ASMJIT_INLINE Error NAME(uint64_t o0) { return ASMJIT_EMIT(X86Inst::kId##ID, IntUtils::asInt(o0)); }
 
 #define ASMJIT_INST_1c(NAME, ID, CONV, T0) \
   ASMJIT_INLINE Error NAME(uint32_t cc, const T0& o0) { return ASMJIT_EMIT(CONV(cc), o0); } \
@@ -74,16 +75,14 @@ namespace asmjit {
   ASMJIT_INLINE Error NAME##z(const T0& o0) { return ASMJIT_EMIT(X86Inst::kId##ID##z, o0); }
 
 #define ASMJIT_INST_2x(NAME, ID, T0, T1) \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1) { \
-    return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1); \
-  }
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1); }
 
 #define ASMJIT_INST_2i(NAME, ID, T0, T1) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, int o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, Utils::asInt(o1)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, unsigned int o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, Utils::asInt(o1)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, int64_t o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, Utils::asInt(o1)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, uint64_t o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, Utils::asInt(o1)); }
+  ASMJIT_INLINE Error NAME(const T0& o0, int o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, IntUtils::asInt(o1)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, unsigned int o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, IntUtils::asInt(o1)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, int64_t o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, IntUtils::asInt(o1)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, uint64_t o1) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, IntUtils::asInt(o1)); }
 
 #define ASMJIT_INST_2c(NAME, ID, CONV, T0, T1) \
   ASMJIT_INLINE Error NAME(uint32_t cc, const T0& o0, const T1& o1) { return ASMJIT_EMIT(CONV(cc), o0, o1); } \
@@ -123,38 +122,38 @@ namespace asmjit {
 
 #define ASMJIT_INST_3i(NAME, ID, T0, T1, T2) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, int o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, Utils::asInt(o2)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, unsigned int o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, Utils::asInt(o2)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, int64_t o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, Utils::asInt(o2)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, uint64_t o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, Utils::asInt(o2)); }
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, int o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, IntUtils::asInt(o2)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, unsigned int o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, IntUtils::asInt(o2)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, int64_t o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, IntUtils::asInt(o2)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, uint64_t o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, IntUtils::asInt(o2)); }
 
 #define ASMJIT_INST_3ii(NAME, ID, T0, T1, T2) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, int o1, int o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, Imm(o1), Utils::asInt(o2)); }
+  ASMJIT_INLINE Error NAME(const T0& o0, int o1, int o2) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, Imm(o1), IntUtils::asInt(o2)); }
 
 #define ASMJIT_INST_4x(NAME, ID, T0, T1, T2, T3) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3); }
 
 #define ASMJIT_INST_4i(NAME, ID, T0, T1, T2, T3) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, int o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, Utils::asInt(o3)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, unsigned int o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, Utils::asInt(o3)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, int64_t o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, Utils::asInt(o3)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, uint64_t o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, Utils::asInt(o3)); }
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, int o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, IntUtils::asInt(o3)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, unsigned int o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, IntUtils::asInt(o3)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, int64_t o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, IntUtils::asInt(o3)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, uint64_t o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, IntUtils::asInt(o3)); }
 
 #define ASMJIT_INST_4ii(NAME, ID, T0, T1, T2, T3) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, int o2, int o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, Imm(o2), Utils::asInt(o3)); }
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, int o2, int o3) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, Imm(o2), IntUtils::asInt(o3)); }
 
 #define ASMJIT_INST_5x(NAME, ID, T0, T1, T2, T3, T4) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, const T4& o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, o4); }
 
 #define ASMJIT_INST_5i(NAME, ID, T0, T1, T2, T3, T4) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, const T4& o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, o4); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, int o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, Utils::asInt(o4)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, unsigned int o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, Utils::asInt(o4)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, int64_t o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, Utils::asInt(o4)); } \
-  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, uint64_t o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, Utils::asInt(o4)); }
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, int o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, IntUtils::asInt(o4)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, unsigned int o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, IntUtils::asInt(o4)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, int64_t o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, IntUtils::asInt(o4)); } \
+  ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, uint64_t o4) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, IntUtils::asInt(o4)); }
 
 #define ASMJIT_INST_6x(NAME, ID, T0, T1, T2, T3, T4, T5) \
   ASMJIT_INLINE Error NAME(const T0& o0, const T1& o1, const T2& o2, const T3& o3, const T4& o4, const T5& o5) { return ASMJIT_EMIT(X86Inst::kId##ID, o0, o1, o2, o3, o4, o5); }
@@ -194,28 +193,23 @@ struct X86EmitterExplicitT {
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  //! Get GPD or GPQ register at index `id` depending on the current architecture.
+  //! Get either GPD or GPQ register of index `id` depending on the current architecture.
   ASMJIT_INLINE X86Gp gpz(uint32_t id) const noexcept {
-    return X86Gp(Init, static_cast<const This*>(this)->_nativeGpReg.getSignature(), id);
+    return X86Gp(Init, static_cast<const This*>(this)->_gpRegInfo.getSignature(), id);
   }
 
-  ASMJIT_INLINE const X86Gp& gpzRef(uint32_t id) const noexcept {
-    ASMJIT_ASSERT(id < 16);
-    return static_cast<const X86Gp&>(static_cast<const This*>(this)->_nativeGpArray[id]);
-  }
-
-  ASMJIT_INLINE const X86Gp& zax() const noexcept { return gpzRef(X86Gp::kIdAx); }
-  ASMJIT_INLINE const X86Gp& zcx() const noexcept { return gpzRef(X86Gp::kIdCx); }
-  ASMJIT_INLINE const X86Gp& zdx() const noexcept { return gpzRef(X86Gp::kIdDx); }
-  ASMJIT_INLINE const X86Gp& zbx() const noexcept { return gpzRef(X86Gp::kIdBx); }
-  ASMJIT_INLINE const X86Gp& zsp() const noexcept { return gpzRef(X86Gp::kIdSp); }
-  ASMJIT_INLINE const X86Gp& zbp() const noexcept { return gpzRef(X86Gp::kIdBp); }
-  ASMJIT_INLINE const X86Gp& zsi() const noexcept { return gpzRef(X86Gp::kIdSi); }
-  ASMJIT_INLINE const X86Gp& zdi() const noexcept { return gpzRef(X86Gp::kIdDi); }
+  ASMJIT_INLINE X86Gp zax() const noexcept { return gpz(X86Gp::kIdAx); }
+  ASMJIT_INLINE X86Gp zcx() const noexcept { return gpz(X86Gp::kIdCx); }
+  ASMJIT_INLINE X86Gp zdx() const noexcept { return gpz(X86Gp::kIdDx); }
+  ASMJIT_INLINE X86Gp zbx() const noexcept { return gpz(X86Gp::kIdBx); }
+  ASMJIT_INLINE X86Gp zsp() const noexcept { return gpz(X86Gp::kIdSp); }
+  ASMJIT_INLINE X86Gp zbp() const noexcept { return gpz(X86Gp::kIdBp); }
+  ASMJIT_INLINE X86Gp zsi() const noexcept { return gpz(X86Gp::kIdSi); }
+  ASMJIT_INLINE X86Gp zdi() const noexcept { return gpz(X86Gp::kIdDi); }
 
   //! Create a target dependent pointer of which base register's id is `baseId`.
   ASMJIT_INLINE X86Mem ptr_base(uint32_t baseId, int32_t off = 0, uint32_t size = 0) const noexcept {
-    uint32_t baseType = static_cast<const This*>(this)->_nativeGpReg.getType();
+    uint32_t baseType = static_cast<const This*>(this)->_gpRegInfo.getType();
     uint32_t flags = 0;
     return X86Mem(Init, baseType, baseId, 0, 0, off, size, flags);
   }
@@ -339,34 +333,34 @@ struct X86EmitterExplicitT {
   // --------------------------------------------------------------------------
 
 protected:
-  ASMJIT_INLINE This& _addOptions(uint32_t options) noexcept {
-    static_cast<This*>(this)->addOptions(options);
+  ASMJIT_INLINE This& _addInstOptions(uint32_t options) noexcept {
+    static_cast<This*>(this)->addInstOptions(options);
     return *static_cast<This*>(this);
   }
 
 public:
   //! Force short form of jmp/jcc instruction.
-  ASMJIT_INLINE This& short_() noexcept { return _addOptions(X86Inst::kOptionShortForm); }
+  ASMJIT_INLINE This& short_() noexcept { return _addInstOptions(X86Inst::kOptionShortForm); }
   //! Force long form of jmp/jcc instruction.
-  ASMJIT_INLINE This& long_() noexcept { return _addOptions(X86Inst::kOptionLongForm); }
+  ASMJIT_INLINE This& long_() noexcept { return _addInstOptions(X86Inst::kOptionLongForm); }
 
   //! Condition is likely to be taken (has only benefit on P4).
-  ASMJIT_INLINE This& taken() noexcept { return _addOptions(X86Inst::kOptionTaken); }
+  ASMJIT_INLINE This& taken() noexcept { return _addInstOptions(X86Inst::kOptionTaken); }
   //! Condition is unlikely to be taken (has only benefit on P4).
-  ASMJIT_INLINE This& notTaken() noexcept { return _addOptions(X86Inst::kOptionNotTaken); }
+  ASMJIT_INLINE This& notTaken() noexcept { return _addInstOptions(X86Inst::kOptionNotTaken); }
 
   //! Use LOCK prefix.
-  ASMJIT_INLINE This& lock() noexcept { return _addOptions(X86Inst::kOptionLock); }
+  ASMJIT_INLINE This& lock() noexcept { return _addInstOptions(X86Inst::kOptionLock); }
 
   //! Use REP/REPZ prefix.
   ASMJIT_INLINE This& rep(const X86Gp& zcx) noexcept {
     static_cast<This*>(this)->_extraReg.init(zcx);
-    return _addOptions(X86Inst::kOptionRep);
+    return _addInstOptions(X86Inst::kOptionRep);
   }
   //! Use REPNZ prefix.
   ASMJIT_INLINE This& repnz(const X86Gp& zcx) noexcept {
     static_cast<This*>(this)->_extraReg.init(zcx);
-    return _addOptions(X86Inst::kOptionRepnz);
+    return _addInstOptions(X86Inst::kOptionRepnz);
   }
 
   //! Use REP/REPZ prefix.
@@ -379,43 +373,43 @@ public:
   //! Prefer MOD_MR encoding over MOD_RM (the default) when encoding instruction
   //! that allows both. This option is only applicable to legacy instructions
   //! where both operands are registers.
-  ASMJIT_INLINE This& mod_mr() noexcept { return _addOptions(X86Inst::kOptionModMR); }
+  ASMJIT_INLINE This& mod_mr() noexcept { return _addInstOptions(X86Inst::kOptionModMR); }
 
   //! Force REX prefix to be emitted even when it's not needed (X64).
   //!
   //! NOTE: Don't use when using high 8-bit registers as REX prefix makes them
   //! inaccessible and \ref X86Assembler refuses to encode such instructions.
-  ASMJIT_INLINE This& rex() noexcept { return _addOptions(X86Inst::kOptionRex);}
+  ASMJIT_INLINE This& rex() noexcept { return _addInstOptions(X86Inst::kOptionRex);}
 
   //! Force REX.B prefix (X64) [It exists for special purposes only].
-  ASMJIT_INLINE This& rex_b() noexcept { return _addOptions(X86Inst::kOptionOpCodeB); }
+  ASMJIT_INLINE This& rex_b() noexcept { return _addInstOptions(X86Inst::kOptionOpCodeB); }
   //! Force REX.X prefix (X64) [It exists for special purposes only].
-  ASMJIT_INLINE This& rex_x() noexcept { return _addOptions(X86Inst::kOptionOpCodeX); }
+  ASMJIT_INLINE This& rex_x() noexcept { return _addInstOptions(X86Inst::kOptionOpCodeX); }
   //! Force REX.R prefix (X64) [It exists for special purposes only].
-  ASMJIT_INLINE This& rex_r() noexcept { return _addOptions(X86Inst::kOptionOpCodeR); }
+  ASMJIT_INLINE This& rex_r() noexcept { return _addInstOptions(X86Inst::kOptionOpCodeR); }
   //! Force REX.W prefix (X64) [It exists for special purposes only].
-  ASMJIT_INLINE This& rex_w() noexcept { return _addOptions(X86Inst::kOptionOpCodeW); }
+  ASMJIT_INLINE This& rex_w() noexcept { return _addInstOptions(X86Inst::kOptionOpCodeW); }
 
   //! Force 3-byte VEX prefix (AVX+).
-  ASMJIT_INLINE This& vex3() noexcept { return _addOptions(X86Inst::kOptionVex3); }
+  ASMJIT_INLINE This& vex3() noexcept { return _addInstOptions(X86Inst::kOptionVex3); }
   //! Force 4-byte EVEX prefix (AVX512+).
-  ASMJIT_INLINE This& evex() noexcept { return _addOptions(X86Inst::kOptionEvex); }
+  ASMJIT_INLINE This& evex() noexcept { return _addInstOptions(X86Inst::kOptionEvex); }
 
   //! Use zeroing instead of merging (AVX512+).
-  ASMJIT_INLINE This& z() noexcept { return _addOptions(X86Inst::kOptionZMask); }
+  ASMJIT_INLINE This& z() noexcept { return _addInstOptions(X86Inst::kOptionZMask); }
   //! Broadcast one element to all other elements (AVX512+).
-  ASMJIT_INLINE This& _1tox() noexcept { return _addOptions(X86Inst::kOption1ToX); }
+  ASMJIT_INLINE This& _1tox() noexcept { return _addInstOptions(X86Inst::kOption1ToX); }
 
   //! Suppress all exceptions (AVX512+).
-  ASMJIT_INLINE This& sae() noexcept { return _addOptions(X86Inst::kOptionSAE); }
+  ASMJIT_INLINE This& sae() noexcept { return _addInstOptions(X86Inst::kOptionSAE); }
   //! Static rounding mode {rn} (round-to-nearest even) and {sae} (AVX512+).
-  ASMJIT_INLINE This& rn_sae() noexcept { return _addOptions(X86Inst::kOptionER | X86Inst::kOptionRN_SAE); }
+  ASMJIT_INLINE This& rn_sae() noexcept { return _addInstOptions(X86Inst::kOptionER | X86Inst::kOptionRN_SAE); }
   //! Static rounding mode {rd} (round-down, toward -inf) and {sae} (AVX512+).
-  ASMJIT_INLINE This& rd_sae() noexcept { return _addOptions(X86Inst::kOptionER | X86Inst::kOptionRD_SAE); }
+  ASMJIT_INLINE This& rd_sae() noexcept { return _addInstOptions(X86Inst::kOptionER | X86Inst::kOptionRD_SAE); }
   //! Static rounding mode {ru} (round-up, toward +inf) and {sae} (AVX512+).
-  ASMJIT_INLINE This& ru_sae() noexcept { return _addOptions(X86Inst::kOptionER | X86Inst::kOptionRU_SAE); }
+  ASMJIT_INLINE This& ru_sae() noexcept { return _addInstOptions(X86Inst::kOptionER | X86Inst::kOptionRU_SAE); }
   //! Static rounding mode {rz} (round-toward-zero, truncate) and {sae} (AVX512+).
-  ASMJIT_INLINE This& rz_sae() noexcept { return _addOptions(X86Inst::kOptionER | X86Inst::kOptionRZ_SAE); }
+  ASMJIT_INLINE This& rz_sae() noexcept { return _addInstOptions(X86Inst::kOptionER | X86Inst::kOptionRZ_SAE); }
 
   // --------------------------------------------------------------------------
   // [General Purpose and Non-SIMD Instructions]
@@ -4857,9 +4851,9 @@ struct X86EmitterImplicitT : public X86EmitterExplicitT<This> {
   // --------------------------------------------------------------------------
 
   //! Use REP/REPZ prefix.
-  ASMJIT_INLINE This& rep() noexcept { return X86EmitterExplicitT<This>::_addOptions(X86Inst::kOptionRep); }
+  ASMJIT_INLINE This& rep() noexcept { return X86EmitterExplicitT<This>::_addInstOptions(X86Inst::kOptionRep); }
   //! Use REPNZ prefix.
-  ASMJIT_INLINE This& repnz() noexcept { return X86EmitterExplicitT<This>::_addOptions(X86Inst::kOptionRepnz); }
+  ASMJIT_INLINE This& repnz() noexcept { return X86EmitterExplicitT<This>::_addInstOptions(X86Inst::kOptionRepnz); }
 
   //! Use REP/REPZ prefix.
   ASMJIT_INLINE This& repe() noexcept { return rep(); }
@@ -5092,8 +5086,8 @@ struct X86EmitterImplicitT : public X86EmitterExplicitT<This> {
 
 //! X86/X64 emitter.
 //!
-//! NOTE: This class cannot be created, you can only cast to it and use it as
-//! emitter that emits to either X86Assembler, X86Builder, or X86Compiler (use
+//! NOTE: This class cannot be instantiated, you can only cast to it and use it
+//! as emitter that emits to either X86Assembler, X86Builder, or X86Compiler (use
 //! with caution with X86Compiler as it expects virtual registers to be used).
 class X86Emitter : public CodeEmitter, public X86EmitterImplicitT<X86Emitter> {
   ASMJIT_NONCONSTRUCTIBLE(X86Emitter)

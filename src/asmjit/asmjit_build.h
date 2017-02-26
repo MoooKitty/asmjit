@@ -24,7 +24,7 @@
 
 #if defined(ASMJIT_CONFIG_FILE)
 # include ASMJIT_CONFIG_FILE
-#endif // ASMJIT_CONFIG_FILE
+#endif
 
 // AsmJit Static Builds and Embedding
 // ----------------------------------
@@ -49,6 +49,11 @@
 // #define ASMJIT_DEBUG              // Define to enable debug-mode.
 // #define ASMJIT_RELEASE            // Define to enable release-mode.
 
+// AsmJit Debug Options
+// --------------------
+
+// #define ASMJIT_DEBUG_LRA          // Define to enable register allocator debugging.
+
 // AsmJit Build Backends
 // ---------------------
 //
@@ -59,8 +64,8 @@
 // #define ASMJIT_BUILD_ARM          // Define to enable ARM32 and ARM64 code-generation.
 // #define ASMJIT_BUILD_HOST         // Define to enable host instruction set.
 
-// AsmJit Build Features
-// ---------------------
+// AsmJit Build Options
+// --------------------
 //
 // Flags can be defined to disable standard features. These are handy especially
 // when building AsmJit statically and some features are not needed or unwanted
@@ -71,12 +76,12 @@
 // #define ASMJIT_DISABLE_LOGGING    // Disable logging and formatting (completely).
 // #define ASMJIT_DISABLE_TEXT       // Disable everything that contains text
 //                                   // representation (instructions, errors, ...).
-// #define ASMJIT_DISABLE_VALIDATION // Disable Validation (completely).
+// #define ASMJIT_DISABLE_VALIDATION // Disable instruction validation feature.
 
 // Prevent compile-time errors caused by misconfiguration.
 #if defined(ASMJIT_DISABLE_TEXT) && !defined(ASMJIT_DISABLE_LOGGING)
 # error "[asmjit] ASMJIT_DISABLE_TEXT requires ASMJIT_DISABLE_LOGGING to be defined."
-#endif // ASMJIT_DISABLE_TEXT && !ASMJIT_DISABLE_LOGGING
+#endif
 
 // Detect ASMJIT_DEBUG and ASMJIT_RELEASE if not forced from outside.
 #if !defined(ASMJIT_DEBUG) && !defined(ASMJIT_RELEASE)
@@ -389,7 +394,7 @@
 #if defined(__cplusplus)
 # if __cplusplus >= 201103L
 #  define ASMJIT_CC_CXX_VERSION __cplusplus
-# elif defined(__GXX_EXPERIMENTAL_CXX0X__) || ASMJIT_CC_MSC_GE(18, 0, 0) || ASMJIT_CC_INTEL_GE(14, 0)
+# elif defined(__GXX_EXPERIMENTAL_CXX0X__) ||            ASMJIT_CC_MSC_GE(18, 0, 0) ||            ASMJIT_CC_INTEL_GE(14, 0)
 #  define ASMJIT_CC_CXX_VERSION 201103L
 # else
 #  define ASMJIT_CC_CXX_VERSION 199711L
@@ -431,6 +436,7 @@
 # define ASMJIT_CC_HAS_OVERRIDE                (__has_extension(__cxx_override_control__))
 # define ASMJIT_CC_HAS_RVALUE                  (__has_extension(__cxx_rvalue_references__))
 # define ASMJIT_CC_HAS_STATIC_ASSERT           (__has_extension(__cxx_static_assert__))
+# define ASMJIT_CC_HAS_STRONG_ENUMS            (__has_extension(__cxx_strong_enums__))
 # define ASMJIT_CC_HAS_VARIADIC_TEMPLATES      (__has_extension(__cxx_variadic_templates__))
 #endif
 
@@ -457,6 +463,7 @@
 # define ASMJIT_CC_HAS_OVERRIDE                (0)
 # define ASMJIT_CC_HAS_RVALUE                  (ASMJIT_CC_CODEGEAR >= 0x0610)
 # define ASMJIT_CC_HAS_STATIC_ASSERT           (ASMJIT_CC_CODEGEAR >= 0x0610)
+# define ASMJIT_CC_HAS_STRONG_ENUMS            (0)
 # define ASMJIT_CC_HAS_VARIADIC_TEMPLATES      (0)
 #endif
 
@@ -489,6 +496,7 @@
 # define ASMJIT_CC_HAS_OVERRIDE                (ASMJIT_CC_GCC_GE(4, 7, 0) && ASMJIT_CC_CXX_VERSION >= 201103L)
 # define ASMJIT_CC_HAS_RVALUE                  (ASMJIT_CC_GCC_GE(4, 3, 0) && ASMJIT_CC_CXX_VERSION >= 201103L)
 # define ASMJIT_CC_HAS_STATIC_ASSERT           (ASMJIT_CC_GCC_GE(4, 3, 0) && ASMJIT_CC_CXX_VERSION >= 201103L)
+# define ASMJIT_CC_HAS_STRONG_ENUMS            (ASMJIT_CC_GCC_GE(4, 4, 0) && ASMJIT_CC_CXX_VERSION >= 201103L)
 # define ASMJIT_CC_HAS_VARIADIC_TEMPLATES      (ASMJIT_CC_GCC_GE(4, 3, 0) && ASMJIT_CC_CXX_VERSION >= 201103L)
 #endif
 
@@ -524,6 +532,7 @@
 # define ASMJIT_CC_HAS_OVERRIDE                (ASMJIT_CC_INTEL >= 1400)
 # define ASMJIT_CC_HAS_RVALUE                  (ASMJIT_CC_INTEL >= 1110)
 # define ASMJIT_CC_HAS_STATIC_ASSERT           (ASMJIT_CC_INTEL >= 1110)
+# define ASMJIT_CC_HAS_STRONG_ENUMS            (ASMJIT_CC_INTEL >= 1300)
 # define ASMJIT_CC_HAS_VARIADIC_TEMPLATES      (ASMJIT_CC_INTEL >= 1206)
 #endif
 
@@ -556,6 +565,7 @@
 # define ASMJIT_CC_HAS_OVERRIDE                (ASMJIT_CC_MSC_GE(14, 0, 0))
 # define ASMJIT_CC_HAS_RVALUE                  (ASMJIT_CC_MSC_GE(16, 0, 0))
 # define ASMJIT_CC_HAS_STATIC_ASSERT           (ASMJIT_CC_MSC_GE(16, 0, 0))
+# define ASMJIT_CC_HAS_STRONG_ENUMS            (ASMJIT_CC_MSC_GE(14, 0, 0))
 # define ASMJIT_CC_HAS_VARIADIC_TEMPLATES      (ASMJIT_CC_MSC_GE(18, 0, 0))
 #endif
 
@@ -637,7 +647,7 @@
 #   endif
 #  endif
 # else
-#  if ASMJIT_CC_CLANG || ASMJIT_CC_GCC_GE(4, 0, 0) || ASMJIT_CC_INTEL
+#  if ASMJIT_CC_CLANG || ASMJIT_CC_GCC_GE(4, 0, 0)
 #   define ASMJIT_API __attribute__((__visibility__("default")))
 #  endif
 # endif
@@ -704,6 +714,21 @@
 # define ASMJIT_NORETURN
 #endif
 // [@CC_NORETURN}@]
+
+// [@CC_ALIGN{@]
+// \def ASMJIT_ALIGN_TYPE
+// \def ASMJIT_ALIGN_VAR
+#if ASMJIT_CC_HAS_DECLSPEC_ALIGN
+# define ASMJIT_ALIGN_TYPE(type, nbytes) __declspec(align(nbytes)) type
+# define ASMJIT_ALIGN_VAR(type, name, nbytes) __declspec(align(nbytes)) type name
+#elif ASMJIT_CC_HAS_ATTRIBUTE_ALIGNED
+# define ASMJIT_ALIGN_TYPE(type, nbytes) __attribute__((__aligned__(nbytes))) type
+# define ASMJIT_ALIGN_VAR(type, name, nbytes) type __attribute__((__aligned__(nbytes))) name
+#else
+# define ASMJIT_ALIGN_TYPE(type, nbytes) type
+# define ASMJIT_ALIGN_VAR(type, name, nbytes) type name
+#endif
+// [@CC_ALIGN}@]
 
 // [@CC_CDECL{@]
 // \def ASMJIT_CDECL
@@ -821,8 +846,10 @@
 // The code falls through annotation (switch / case).
 #if ASMJIT_CC_CLANG && __cplusplus >= 201103L
 # define ASMJIT_FALLTHROUGH [[clang::fallthrough]]
+#elif ASMJIT_CC_GCC_GE(7, 0, 0)
+# define ASMJIT_FALLTHROUGH __attribute__((__fallthrough__))
 #else
-# define ASMJIT_FALLTHROUGH (void)0
+# define ASMJIT_FALLTHROUGH (void)0 /* fallthrough */
 #endif
 // [@CC_FALLTHROUGH}@]
 
@@ -895,7 +922,7 @@ typedef unsigned __int64 uint64_t;
 
 #if ASMJIT_OS_POSIX
 # include <pthread.h>
-#endif // ASMJIT_OS_POSIX
+#endif
 
 // ============================================================================
 // [asmjit::Build - Additional]
@@ -912,8 +939,8 @@ typedef unsigned __int64 uint64_t;
 #if defined(ASMJIT_BUILD_HOST)
 # if (ASMJIT_ARCH_X86 || ASMJIT_ARCH_X64) && !defined(ASMJIT_BUILD_X86)
 #  define ASMJIT_BUILD_X86
-# endif // ASMJIT_ARCH_X86
-#endif // ASMJIT_BUILD_HOST
+# endif
+#endif
 
 #if ASMJIT_CC_MSC
 # define ASMJIT_UINT64_C(x) x##ui64
@@ -934,7 +961,7 @@ typedef unsigned __int64 uint64_t;
 # else
 #  define ASMJIT_FAVOR_SIZE
 # endif
-#endif // ASMJIT_EXPORTS
+#endif
 
 // ============================================================================
 // [asmjit::Build - Test]
@@ -943,7 +970,7 @@ typedef unsigned __int64 uint64_t;
 // Include a unit testing package if this is a `asmjit_test` build.
 #if defined(ASMJIT_TEST)
 # include "../../test/broken.h"
-#endif // ASMJIT_TEST
+#endif
 
 // [Guard]
 #endif // _ASMJIT_BUILD_H

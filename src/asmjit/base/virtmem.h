@@ -5,8 +5,8 @@
 // Zlib - See LICENSE.md file in the package.
 
 // [Guard]
-#ifndef _ASMJIT_BASE_VMEM_H
-#define _ASMJIT_BASE_VMEM_H
+#ifndef _ASMJIT_BASE_VIRTMEM_H
+#define _ASMJIT_BASE_VIRTMEM_H
 
 // [Dependencies]
 #include "../base/globals.h"
@@ -21,16 +21,20 @@ namespace asmjit {
 //! \{
 
 // ============================================================================
-// [asmjit::VMemMgr]
+// [asmjit::VirtMem]
 // ============================================================================
 
-//! Reference implementation of memory manager that uses `VMemUtil` to allocate
-//! chunks of virtual memory and bit arrays to manage it.
-class VMemMgr {
+//! Reference implementation of memory manager that uses `OSUtils` to allocate
+//! chunks of virtual memory and uses bit arrays to manage it.
+class VirtMem {
 public:
-  //! Type of virtual memory allocation, see `VMemMgr::alloc()`.
+  struct RBNode;
+  struct MemNode;
+  struct PermanentNode;
+
+  //! Type of virtual memory allocation, see `VirtMem::alloc()`.
   ASMJIT_ENUM(AllocType) {
-    //! Normal memory allocation, has to be freed by `VMemMgr::release()`.
+    //! Normal memory allocation, has to be freed by `VirtMem::release()`.
     kAllocFreeable = 0,
     //! Allocate permanent memory, can't be freed.
     kAllocPermanent = 1
@@ -41,19 +45,19 @@ public:
   // --------------------------------------------------------------------------
 
 #if !ASMJIT_OS_WINDOWS
-  //! Create a `VMemMgr` instance.
-  ASMJIT_API VMemMgr() noexcept;
+  //! Create a `VirtMem` instance.
+  ASMJIT_API VirtMem() noexcept;
 #else
-  //! Create a `VMemMgr` instance.
+  //! Create a `VirtMem` instance.
   //!
   //! NOTE: When running on Windows it's possible to specify a `hProcess` to
   //! be used for memory allocation. Using `hProcess` allows to allocate memory
   //! of a remote process.
-  ASMJIT_API VMemMgr(HANDLE hProcess = static_cast<HANDLE>(0)) noexcept;
-#endif // ASMJIT_OS_WINDOWS
+  ASMJIT_API VirtMem(HANDLE hProcess = static_cast<HANDLE>(0)) noexcept;
+#endif
 
-  //! Destroy the `VMemMgr` instance and free all blocks.
-  ASMJIT_API ~VMemMgr() noexcept;
+  //! Destroy the `VirtMem` instance and free all blocks.
+  ASMJIT_API ~VirtMem() noexcept;
 
   // --------------------------------------------------------------------------
   // [Reset]
@@ -69,7 +73,7 @@ public:
 #if ASMJIT_OS_WINDOWS
   //! Get the handle of the process memory manager is bound to.
   ASMJIT_INLINE HANDLE getProcessHandle() const noexcept { return _hProcess; }
-#endif // ASMJIT_OS_WINDOWS
+#endif
 
   //! Get how many bytes are currently allocated.
   ASMJIT_INLINE size_t getAllocatedBytes() const noexcept { return _allocatedBytes; }
@@ -114,7 +118,7 @@ public:
 
 #if ASMJIT_OS_WINDOWS
   HANDLE _hProcess;                      //!< Process passed to `VirtualAllocEx` and `VirtualFree`.
-#endif // ASMJIT_OS_WINDOWS
+#endif
   Lock _lock;                            //!< Lock to enable thread-safe functionality.
 
   size_t _blockSize;                     //!< Default block size.
@@ -124,13 +128,6 @@ public:
   size_t _allocatedBytes;                //!< How many bytes are currently allocated.
   size_t _usedBytes;                     //!< How many bytes are currently used.
 
-  //! \internal
-  //! \{
-
-  struct RbNode;
-  struct MemNode;
-  struct PermanentNode;
-
   // Memory nodes root.
   MemNode* _root;
   // Memory nodes list.
@@ -139,8 +136,6 @@ public:
   MemNode* _optimal;
   // Permanent memory.
   PermanentNode* _permanent;
-
-  //! \}
 };
 
 //! \}
@@ -151,4 +146,4 @@ public:
 #include "../asmjit_apiend.h"
 
 // [Guard]
-#endif // _ASMJIT_BASE_VMEM_H
+#endif // _ASMJIT_BASE_VIRTMEM_H

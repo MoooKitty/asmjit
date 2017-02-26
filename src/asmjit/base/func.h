@@ -8,10 +8,9 @@
 #ifndef _ASMJIT_BASE_FUNC_H
 #define _ASMJIT_BASE_FUNC_H
 
-#include "../asmjit_build.h"
-
 // [Dependencies]
 #include "../base/arch.h"
+#include "../base/intutils.h"
 #include "../base/operand.h"
 #include "../base/utils.h"
 
@@ -38,7 +37,7 @@ class CodeEmitter;
 //! Function calling convention is a scheme that defines how function parameters
 //! are passed and how function returns its result. AsmJit defines a variety of
 //! architecture and OS specific calling conventions and also provides a compile
-//! time detection to make JIT code-generation easier.
+//! time detection to make the code-generation easier.
 struct CallConv {
   //! Calling convention id.
   ASMJIT_ENUM(Id) {
@@ -95,12 +94,9 @@ struct CallConv {
     kIdX86FastEval3 = 30,
     kIdX86FastEval4 = 31,
 
-    //! X64 calling convention defined by WIN64-ABI.
-    //!
-    //! Links:
-    //!   * <http://msdn.microsoft.com/en-us/library/9b372w95.aspx>.
+    //! X64 calling convention - WIN64-ABI.
     kIdX86Win64 = 32,
-    //! X64 calling convention used by Unix platforms (SYSV/AMD64-ABI).
+    //! X64 calling convention - SystemV / AMD64-ABI.
     kIdX86SysV64 = 33,
 
     kIdX64FastEval2 = 45,
@@ -120,8 +116,8 @@ struct CallConv {
     // [Internal]
     // ------------------------------------------------------------------------
 
-    _kIdX86Start = 16,   //!< \internal
-    _kIdX86End = 31,     //!< \internal
+    _kIdX86Start = 16,  //!< \internal
+    _kIdX86End = 31,    //!< \internal
 
     _kIdX64Start = 32,  //!< \internal
     _kIdX64End = 47,    //!< \internal
@@ -186,17 +182,16 @@ struct CallConv {
 #endif
   };
 
-  //! Calling convention algorithm.
+  //! Strategy used to assign registers to function arguments.
   //!
   //! This is AsmJit specific. It basically describes how should AsmJit convert
-  //! the function arguments defined by `FuncSignature` into register ids or
-  //! stack offsets. The default algorithm is a standard algorithm that assigns
-  //! registers first, and then assigns stack. The Win64 algorithm does register
-  //! shadowing as defined by `WIN64` calling convention - it applies to 64-bit
-  //! calling conventions only.
-  ASMJIT_ENUM(Algorithm) {
-    kAlgorithmDefault    = 0,            //!< Default algorithm (cross-platform).
-    kAlgorithmWin64      = 1             //!< WIN64 specific algorithm.
+  //! the function arguments defined by `FuncSignature` into register IDs or
+  //! stack offsets. The default strategy assigns registers and then stack.
+  //! The Win64 strategy does register shadowing as defined by `WIN64` calling
+  //! convention - it applies to 64-bit calling conventions only.
+  ASMJIT_ENUM(Strategy) {
+    kStrategyDefault     = 0,            //!< Default register assignment strategy.
+    kStrategyWin64       = 1             //!< WIN64 specific register assignment strategy.
   };
 
   //! Calling convention flags.
@@ -209,14 +204,13 @@ struct CallConv {
 
   //! Internal limits of AsmJit/CallConv.
   ASMJIT_ENUM(Limits) {
-    kMaxVRegKinds        = Globals::kMaxVRegKinds,
-    kNumRegArgsPerKind   = 8
+    kMaxRegArgsPerGroup  = 16
   };
 
   //! Passed registers' order.
   union RegOrder {
-    uint8_t id[kNumRegArgsPerKind];      //!< Passed registers, ordered.
-    uint32_t packed[(kNumRegArgsPerKind + 3) / 4];
+    uint8_t id[kMaxRegArgsPerGroup];     //!< Passed registers, ordered.
+    uint32_t packed[(kMaxRegArgsPerGroup + 3) / 4];
   };
 
   // --------------------------------------------------------------------------
@@ -244,107 +238,104 @@ struct CallConv {
   //! Get calling convention id, see \ref Id.
   ASMJIT_INLINE uint32_t getId() const noexcept { return _id; }
   //! Set calling convention id, see \ref Id.
-  ASMJIT_INLINE void setId(uint32_t id) noexcept { _id = static_cast<uint8_t>(id); }
+  ASMJIT_INLINE void setId(uint32_t id) noexcept { _id = IntUtils::toUInt8(id); }
 
   //! Get architecture type.
   ASMJIT_INLINE uint32_t getArchType() const noexcept { return _archType; }
   //! Set architecture type.
-  ASMJIT_INLINE void setArchType(uint32_t archType) noexcept { _archType = static_cast<uint8_t>(archType); }
+  ASMJIT_INLINE void setArchType(uint32_t archType) noexcept { _archType = IntUtils::toUInt8(archType); }
 
-  //! Get calling convention algorithm, see \ref Algorithm.
-  ASMJIT_INLINE uint32_t getAlgorithm() const noexcept { return _algorithm; }
-  //! Set calling convention algorithm, see \ref Algorithm.
-  ASMJIT_INLINE void setAlgorithm(uint32_t algorithm) noexcept { _algorithm = static_cast<uint8_t>(algorithm); }
+  //! Get a strategy used to assign registers to arguments, see \ref Strategy.
+  ASMJIT_INLINE uint32_t getStrategy() const noexcept { return _strategy; }
+  //! Set a strategy used to assign registers to arguments, see \ref Strategy.
+  ASMJIT_INLINE void setStrategy(uint32_t strategy) noexcept { _strategy = IntUtils::toUInt8(strategy); }
 
   //! Get if the calling convention has the given `flag` set.
-  ASMJIT_INLINE bool hasFlag(uint32_t flag) const noexcept { return (_flags & flag) != 0; }
+  ASMJIT_INLINE bool hasFlag(uint32_t flag) const noexcept { return (static_cast<uint32_t>(_flags) & flag) != 0; }
   //! Get calling convention flags, see \ref Flags.
-  ASMJIT_INLINE uint32_t getFlags() const noexcept { return _flags; }
+  ASMJIT_INLINE uint32_t getFlags() const noexcept { return static_cast<uint32_t>(_flags); }
   //! Add calling convention flags, see \ref Flags.
-  ASMJIT_INLINE void setFlags(uint32_t flag) noexcept { _flags = flag; };
+  ASMJIT_INLINE void setFlags(uint32_t flag) noexcept { _flags = IntUtils::toUInt8(flag); };
   //! Add calling convention flags, see \ref Flags.
-  ASMJIT_INLINE void addFlags(uint32_t flag) noexcept { _flags |= flag; };
-
-  //! Get a natural stack alignment.
-  ASMJIT_INLINE uint32_t getNaturalStackAlignment() const noexcept { return _naturalStackAlignment; }
-
-  //! Set a natural stack alignment.
-  //!
-  //! This function can be used to override the default stack alignment in case
-  //! that you know that it's alignment is different. For example it allows to
-  //! implement custom calling conventions that guarantee higher stack alignment.
-  ASMJIT_INLINE void setNaturalStackAlignment(uint32_t value) noexcept {
-    ASMJIT_ASSERT(value < 256);
-    _naturalStackAlignment = static_cast<uint8_t>(value);
-  }
-
-  //! Get if this calling convention specifies 'SpillZone'.
-  ASMJIT_INLINE bool hasSpillZone() const noexcept { return _spillZoneSize != 0; }
-  //! Get size of 'SpillZone'.
-  ASMJIT_INLINE uint32_t getSpillZoneSize() const noexcept { return _spillZoneSize; }
-  //! Set size of 'SpillZone'.
-  ASMJIT_INLINE void setSpillZoneSize(uint32_t size) noexcept { _spillZoneSize = static_cast<uint8_t>(size); }
+  ASMJIT_INLINE void addFlags(uint32_t flags) noexcept { _flags = IntUtils::toUInt8(_flags | flags); };
 
   //! Get if this calling convention specifies 'RedZone'.
   ASMJIT_INLINE bool hasRedZone() const noexcept { return _redZoneSize != 0; }
   //! Get size of 'RedZone'.
   ASMJIT_INLINE uint32_t getRedZoneSize() const noexcept { return _redZoneSize; }
   //! Set size of 'RedZone'.
-  ASMJIT_INLINE void setRedZoneSize(uint32_t size) noexcept { _redZoneSize = static_cast<uint16_t>(size); }
+  ASMJIT_INLINE void setRedZoneSize(uint32_t size) noexcept { _redZoneSize = IntUtils::toUInt8(size); }
 
-  ASMJIT_INLINE const uint8_t* getPassedOrder(uint32_t kind) const noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    return _passedOrder[kind].id;
+  //! Get if this calling convention specifies 'SpillZone'.
+  ASMJIT_INLINE bool hasSpillZone() const noexcept { return _spillZoneSize != 0; }
+  //! Get size of 'SpillZone'.
+  ASMJIT_INLINE uint32_t getSpillZoneSize() const noexcept { return _spillZoneSize; }
+  //! Set size of 'SpillZone'.
+  ASMJIT_INLINE void setSpillZoneSize(uint32_t size) noexcept { _spillZoneSize = IntUtils::toUInt8(size); }
+
+  //! Get a natural stack alignment.
+  ASMJIT_INLINE uint32_t getNaturalStackAlignment() const noexcept { return _naturalStackAlignment; }
+  //! Set a natural stack alignment.
+  //!
+  //! This function can be used to override the default stack alignment in case
+  //! that you know that it's alignment is different. For example it allows to
+  //! implement custom calling conventions that guarantee higher stack alignment.
+  ASMJIT_INLINE void setNaturalStackAlignment(uint32_t value) noexcept { _naturalStackAlignment = IntUtils::toUInt8(value); }
+
+  ASMJIT_INLINE const uint8_t* getPassedOrder(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _passedOrder[group].id;
   }
 
-  ASMJIT_INLINE uint32_t getPassedRegs(uint32_t kind) const noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    return _passedRegs[kind];
+  ASMJIT_INLINE uint32_t getPassedRegs(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _passedRegs[group];
   }
 
-  ASMJIT_INLINE void _setPassedPacked(uint32_t kind, uint32_t p0, uint32_t p1) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
+  ASMJIT_INLINE void _setPassedPacked(uint32_t group, uint32_t p0, uint32_t p1, uint32_t p2, uint32_t p3) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
 
-    _passedOrder[kind].packed[0] = p0;
-    _passedOrder[kind].packed[1] = p1;
+    _passedOrder[group].packed[0] = p0;
+    _passedOrder[group].packed[1] = p1;
+    _passedOrder[group].packed[2] = p2;
+    _passedOrder[group].packed[3] = p3;
   }
 
-  ASMJIT_INLINE void setPassedToNone(uint32_t kind) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
+  ASMJIT_INLINE void setPassedToNone(uint32_t group) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
 
-    _setPassedPacked(kind, ASMJIT_PACK32_4x8(0xFF, 0xFF, 0xFF, 0xFF),
-                           ASMJIT_PACK32_4x8(0xFF, 0xFF, 0xFF, 0xFF));
-    _passedRegs[kind] = 0;
+    _setPassedPacked(group, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU);
+    _passedRegs[group] = 0U;
   }
 
-  ASMJIT_INLINE void setPassedOrder(uint32_t kind, uint32_t a0, uint32_t a1 = 0xFF, uint32_t a2 = 0xFF, uint32_t a3 = 0xFF, uint32_t a4 = 0xFF, uint32_t a5 = 0xFF, uint32_t a6 = 0xFF, uint32_t a7 = 0xFF) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
+  ASMJIT_INLINE void setPassedOrder(uint32_t group, uint32_t a0, uint32_t a1 = 0xFF, uint32_t a2 = 0xFF, uint32_t a3 = 0xFF, uint32_t a4 = 0xFF, uint32_t a5 = 0xFF, uint32_t a6 = 0xFF, uint32_t a7 = 0xFF) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
 
-    _setPassedPacked(kind, ASMJIT_PACK32_4x8(a0, a1, a2, a3),
-                           ASMJIT_PACK32_4x8(a4, a5, a6, a7));
+    // NOTE: This should always be called with all arguments known at compile time,
+    // so even if it looks scary it should be translated into few instructions.
+    _setPassedPacked(group, ASMJIT_PACK32_4x8(a0, a1, a2, a3),
+                            ASMJIT_PACK32_4x8(a4, a5, a6, a7),
+                            0xFFFFFFFFU,
+                            0xFFFFFFFFU);
 
-    // NOTE: This should always be called with all arguments known at compile
-    // time, so even if it looks scary it should be translated to a single
-    // instruction.
-    _passedRegs[kind] = (a0 != 0xFF ? 1U << a0 : 0U) |
-                        (a1 != 0xFF ? 1U << a1 : 0U) |
-                        (a2 != 0xFF ? 1U << a2 : 0U) |
-                        (a3 != 0xFF ? 1U << a3 : 0U) |
-                        (a4 != 0xFF ? 1U << a4 : 0U) |
-                        (a5 != 0xFF ? 1U << a5 : 0U) |
-                        (a6 != 0xFF ? 1U << a6 : 0U) |
-                        (a7 != 0xFF ? 1U << a7 : 0U) ;
+    _passedRegs[group] = (a0 != 0xFF ? 1U << a0 : 0U) |
+                         (a1 != 0xFF ? 1U << a1 : 0U) |
+                         (a2 != 0xFF ? 1U << a2 : 0U) |
+                         (a3 != 0xFF ? 1U << a3 : 0U) |
+                         (a4 != 0xFF ? 1U << a4 : 0U) |
+                         (a5 != 0xFF ? 1U << a5 : 0U) |
+                         (a6 != 0xFF ? 1U << a6 : 0U) |
+                         (a7 != 0xFF ? 1U << a7 : 0U) ;
   }
 
-  ASMJIT_INLINE uint32_t getPreservedRegs(uint32_t kind) const noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    return _preservedRegs[kind];
+  ASMJIT_INLINE uint32_t getPreservedRegs(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _preservedRegs[group];
   }
 
-
-  ASMJIT_INLINE void setPreservedRegs(uint32_t kind, uint32_t regs) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    _preservedRegs[kind] = regs;
+  ASMJIT_INLINE void setPreservedRegs(uint32_t group, uint32_t regs) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    _preservedRegs[group] = regs;
   }
 
   // --------------------------------------------------------------------------
@@ -353,16 +344,17 @@ struct CallConv {
 
   uint8_t _id;                           //!< Calling convention id, see \ref Id.
   uint8_t _archType;                     //!< Architecture type (see \ref ArchInfo::Type).
-  uint8_t _algorithm;                    //!< Calling convention algorithm.
-  uint8_t _flags;                        //!< Calling convention flags.
+  uint8_t _strategy;                     //!< Register assignment strategy.
+  uint8_t _flags;                        //!< Flags.
 
-  uint8_t _naturalStackAlignment;        //!< Natural stack alignment as defined by OS/ABI.
+  uint8_t _redZoneSize;                  //!< Red zone size (AMD64 == 128 bytes).
   uint8_t _spillZoneSize;                //!< Spill zone size (WIN64 == 32 bytes).
-  uint16_t _redZoneSize;                 //!< Red zone size (AMD64 == 128 bytes).
+  uint8_t _naturalStackAlignment;        //!< Natural stack alignment as defined by OS/ABI.
+  uint8_t _reserved[1];
 
-  RegOrder _passedOrder[kMaxVRegKinds];  //!< Passed registers' order, per kind.
-  uint32_t _passedRegs[kMaxVRegKinds];   //!< Mask of all passed registers, per kind.
-  uint32_t _preservedRegs[kMaxVRegKinds];//!< Mask of all preserved registers, per kind.
+  uint32_t _passedRegs[Reg::kGroupVirt];    //!< Mask of all passed registers, per group.
+  uint32_t _preservedRegs[Reg::kGroupVirt]; //!< Mask of all preserved registers, per group.
+  RegOrder _passedOrder[Reg::kGroupVirt];   //!< Passed registers' order, per group.
 };
 
 // ============================================================================
@@ -414,16 +406,14 @@ struct FuncSignature {
     ASMJIT_ASSERT(ccId <= 0xFF);
     ASMJIT_ASSERT(argCount <= 0xFF);
 
-    _callConv = static_cast<uint8_t>(ccId);
-    _argCount = static_cast<uint8_t>(argCount);
+    _callConv = IntUtils::toUInt8(ccId);
+    _argCount = IntUtils::toUInt8(argCount);
     _vaIndex = kNoVarArgs;
-    _ret = ret;
+    _ret = IntUtils::toUInt8(ret);
     _args = args;
   }
 
-  ASMJIT_INLINE void reset() noexcept {
-    memset(this, 0, sizeof(*this));
-  }
+  ASMJIT_INLINE void reset() noexcept { ::memset(this, 0, sizeof(*this)); }
 
   // --------------------------------------------------------------------------
   // [Accessors]
@@ -458,9 +448,9 @@ struct FuncSignature {
 
   uint8_t _callConv;                     //!< Calling convention id.
   uint8_t _argCount;                     //!< Count of arguments.
-  uint8_t _vaIndex;                      //!< Index to a first vararg or `kNoVarArgs`.
-  uint8_t _ret;                          //!< TypeId of a return value.
-  const uint8_t* _args;                  //!< TypeIds of function arguments.
+  uint8_t _vaIndex;                      //!< Index of a first VA or `kNoVarArgs`.
+  uint8_t _ret;                          //!< Return value TypeId.
+  const uint8_t* _args;                  //!< Function arguments TypeIds.
 };
 
 // ============================================================================
@@ -580,7 +570,7 @@ public:
 };
 
 #if ASMJIT_CC_HAS_VARIADIC_TEMPLATES
-//! Static function signature (variadic).
+//! Static function signature (variadic template).
 template<typename RET, typename... ARGS>
 class FuncSignatureT : public FuncSignature {
 public:
@@ -589,7 +579,7 @@ public:
     init(ccId, T(RET), args, ASMJIT_ARRAY_SIZE(args));
   }
 };
-#endif // ASMJIT_CC_HAS_VARIADIC_TEMPLATES
+#endif
 
 #undef T
 
@@ -614,19 +604,19 @@ public:
 
   ASMJIT_INLINE void setCallConv(uint32_t ccId) noexcept {
     ASMJIT_ASSERT(ccId <= 0xFF);
-    _callConv = static_cast<uint8_t>(ccId);
+    _callConv = IntUtils::toUInt8(ccId);
   }
 
   //! Set the return type to `retType`.
-  ASMJIT_INLINE void setRet(uint32_t retType) noexcept { _ret = retType; }
+  ASMJIT_INLINE void setRet(uint32_t retType) noexcept { _ret = IntUtils::toUInt8(retType); }
   //! Set the return type based on `T`.
   template<typename T>
   ASMJIT_INLINE void setRetT() noexcept { setRet(TypeIdOf<T>::kTypeId); }
 
-  //! Set the argument at index `i` to the `type`
-  ASMJIT_INLINE void setArg(uint32_t i, uint32_t type) noexcept {
+  //! Set the argument at index `i` to `argType`.
+  ASMJIT_INLINE void setArg(uint32_t i, uint32_t argType) noexcept {
     ASMJIT_ASSERT(i < _argCount);
-    _builderArgList[i] = type;
+    _builderArgList[i] = IntUtils::toUInt8(argType);
   }
   //! Set the argument at index `i` to the type based on `T`.
   template<typename T>
@@ -635,7 +625,7 @@ public:
   //! Append an argument of `type` to the function prototype.
   ASMJIT_INLINE void addArg(uint32_t type) noexcept {
     ASMJIT_ASSERT(_argCount < kFuncArgCount);
-    _builderArgList[_argCount++] = static_cast<uint8_t>(type);
+    _builderArgList[_argCount++] = IntUtils::toUInt8(type);
   }
   //! Append an argument of type based on `T` to the function prototype.
   template<typename T>
@@ -649,6 +639,117 @@ public:
 };
 
 // ============================================================================
+// [asmjit::FuncValue]
+// ============================================================================
+
+//! Argument or return value as defined by `FuncSignature`, but with register
+//! or stack address (and other metadata) assigned to it.
+struct FuncValue {
+  ASMJIT_ENUM(Parts) {
+    kStackOffsetShift = 0,
+    kStackOffsetMask  = 0x0000FFFFU,
+
+    kRegIdShift       = 0,
+    kRegIdMask        = 0x000000FFU,
+
+    kRegTypeShift     = 8,
+    kRegTypeMask      = 0x0000FF00U,
+
+    kIsReg            = 0x00010000U,   //!< Passed by register.
+    kIsStack          = 0x00020000U,   //!< Passed by stack.
+    kIsIndirect       = 0x00040000U,   //!< Passed indirectly by reference (internally a pointer).
+    kIsDone           = 0x00080000U,   //!< Used internally by arguments allocator.
+
+    kTypeIdShift      = 24,
+    kTypeIdMask       = 0xFF000000U
+  };
+
+  // --------------------------------------------------------------------------
+  // [Init / Reset]
+  // --------------------------------------------------------------------------
+
+  //! Initialize this in/out by a given `typeId`.
+  ASMJIT_INLINE void init(uint32_t typeId) noexcept { _data = typeId << kTypeIdShift; }
+
+  ASMJIT_INLINE void initReg(uint32_t regType, uint32_t regId, uint32_t typeId, uint32_t flags = 0) noexcept {
+    _data = (regType << kRegTypeShift) | (regId << kRegIdShift) | (typeId << kTypeIdShift) | kIsReg | flags;
+  }
+
+  ASMJIT_INLINE void initStack(uint32_t offset, uint32_t typeId) noexcept {
+    _data = (offset << kStackOffsetShift) | (typeId << kTypeIdShift) | kIsStack;
+  }
+
+  //! Reset the value to its uninitialized and unassigned state.
+  ASMJIT_INLINE void reset() noexcept { _data = 0; }
+
+  // --------------------------------------------------------------------------
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  ASMJIT_INLINE bool hasFlag(uint32_t flag) const noexcept { return (_data & flag) != 0; }
+  ASMJIT_INLINE void addFlags(uint32_t flags) noexcept { _data |= flags; }
+  ASMJIT_INLINE void clearFlags(uint32_t flags) noexcept { _data &= ~flags; }
+
+  //! Get if this value is initialized (i.e. contains a valid data).
+  ASMJIT_INLINE bool isInitialized() const noexcept { return _data != 0; }
+  //! Get if this argument is passed by register.
+  ASMJIT_INLINE bool isReg() const noexcept { return hasFlag(kIsReg); }
+  //! Get if this argument is passed by stack.
+  ASMJIT_INLINE bool isStack() const noexcept { return hasFlag(kIsStack); }
+  //! Get if this argument is passed by register.
+  ASMJIT_INLINE bool isAssigned() const noexcept { return hasFlag(kIsReg | kIsStack); }
+  //! Get if this argument is passed through a pointer (used by WIN64 to pass XMM|YMM|ZMM).
+  ASMJIT_INLINE bool isIndirect() const noexcept { return hasFlag(kIsIndirect); }
+
+  ASMJIT_INLINE bool isDone() const noexcept { return hasFlag(kIsDone); }
+
+  //! Get a register type of the register used to pass the argument or return the value.
+  ASMJIT_INLINE uint32_t getRegType() const noexcept { return (_data & kRegTypeMask) >> kRegTypeShift; }
+  ASMJIT_INLINE void setRegType(uint32_t regType) noexcept { _data = (_data & ~kRegTypeMask) | (regType << kRegTypeShift); }
+
+  //! Get a physical id of the register used to pass the argument or return the value.
+  ASMJIT_INLINE uint32_t getRegId() const noexcept { return (_data & kRegIdMask) >> kRegIdShift; }
+  ASMJIT_INLINE void setRegId(uint32_t regId) noexcept { _data = (_data & ~kRegIdMask) | (regId << kRegIdShift); }
+
+  ASMJIT_INLINE void addRegData(uint32_t type, uint32_t id) noexcept {
+    ASMJIT_ASSERT((_data & (kRegTypeMask | kRegIdMask)) == 0);
+    _data |= (type << kRegTypeShift) | (id << kRegIdShift) | kIsReg;
+  }
+
+  //! Get a stack offset of this argument (always zero or positive).
+  ASMJIT_INLINE uint32_t getStackOffset() const noexcept {
+    return (_data & kStackOffsetMask) >> kStackOffsetShift;
+  }
+
+  // TODO: INVALID NAME, AMBIGUOUS.
+  ASMJIT_INLINE void addStackOffset(uint32_t offset) noexcept {
+    ASMJIT_ASSERT((_data & kStackOffsetMask) == 0);
+    _data |= (offset << kStackOffsetShift) | kIsStack;
+  }
+
+  //! Get virtual type of this argument or return value.
+  ASMJIT_INLINE uint32_t getTypeId() const noexcept {
+    return _data >> kTypeIdShift;
+  }
+
+  ASMJIT_INLINE void setTypeId(uint32_t typeId) noexcept {
+    _data = (_data & ~(kTypeIdMask)) | (typeId << kTypeIdShift);
+  }
+
+  ASMJIT_INLINE void addTypeId(uint32_t typeId) noexcept {
+    ASMJIT_ASSERT((_data & kTypeIdMask) != 0);
+    _data |= (typeId << kTypeIdShift);
+  }
+
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
+  uint32_t _data;
+};
+
+// ============================================================================
 // [asmjit::FuncDetail]
 // ============================================================================
 
@@ -659,85 +760,12 @@ public:
 //! arguments have assigned either register type & id or stack address.
 class FuncDetail {
 public:
-  ASMJIT_ENUM(Limits) {
-    kMaxVRegKinds = Globals::kMaxVRegKinds
-  };
-
-  //! Argument or return value as defined by `FuncSignature`, but with register
-  //! or stack address (and other metadata) assigned.
-  struct Value {
-    ASMJIT_ENUM(Parts) {
-      kTypeIdShift      = 24,
-      kTypeIdMask       = 0xFF000000U,
-
-      kRegTypeShift     = 8,
-      kRegTypeMask      = 0x0000FF00U,
-
-      kRegIdShift       = 0,
-      kRegIdMask        = 0x000000FFU,
-
-      kStackOffsetShift = 0,
-      kStackOffsetMask  = 0x0000FFFFU,
-
-      kIsByReg          = 0x00010000U,
-      kIsByStack        = 0x00020000U,
-      kIsIndirect       = 0x00040000U
-    };
-
-    //! Get if this value is initialized (i.e. contains a valid data).
-    ASMJIT_INLINE bool isInitialized() const noexcept { return _value != 0; }
-    //! Initialize this in/out by a given `typeId`.
-    ASMJIT_INLINE void initTypeId(uint32_t typeId) noexcept { _value = typeId << kTypeIdShift; }
-    //! Initialize this in/out by a given `typeId`, `regType`, and `regId`.
-    ASMJIT_INLINE void initReg(uint32_t typeId, uint32_t regType, uint32_t regId) noexcept {
-      _value = (typeId << kTypeIdShift) | (regType << kRegTypeShift) | (regId << kRegIdShift) | kIsByReg;
-    }
-    //! Initialize this in/out by a given `typeId` and `offset`.
-    ASMJIT_INLINE void initStack(uint32_t typeId, uint32_t stackOffset) noexcept {
-      _value = (typeId << kTypeIdShift) | (stackOffset << kStackOffsetShift) | kIsByStack;
-    }
-    //! Reset the value to its uninitialized and unassigned state.
-    ASMJIT_INLINE void reset() noexcept { _value = 0; }
-
-    ASMJIT_INLINE void assignToReg(uint32_t regType, uint32_t regId) noexcept {
-      ASMJIT_ASSERT(!isAssigned());
-      _value |= (regType << kRegTypeShift) | (regId << kRegIdShift) | kIsByReg;
-    }
-
-    ASMJIT_INLINE void assignToStack(int32_t offset) noexcept {
-      ASMJIT_ASSERT(!isAssigned());
-      _value |= (offset << kStackOffsetShift) | kIsByStack;
-    }
-
-    //! Get if this argument is passed by register.
-    ASMJIT_INLINE bool byReg() const noexcept { return (_value & kIsByReg) != 0; }
-    //! Get if this argument is passed by stack.
-    ASMJIT_INLINE bool byStack() const noexcept { return (_value & kIsByStack) != 0; }
-    //! Get if this argument is passed by register.
-    ASMJIT_INLINE bool isAssigned() const noexcept { return (_value & (kIsByReg | kIsByStack)) != 0; }
-    //! Get if this argument is passed through a pointer (used by WIN64 to pass XMM|YMM|ZMM).
-    ASMJIT_INLINE bool isIndirect() const noexcept { return (_value & kIsIndirect) != 0; }
-
-    //! Get virtual type of this argument or return value.
-    ASMJIT_INLINE uint32_t getTypeId() const noexcept { return _value >> kTypeIdShift; }
-    //! Get a register type of the register used to pass the argument or return the value.
-    ASMJIT_INLINE uint32_t getRegType() const noexcept { return (_value & kRegTypeMask) >> kRegTypeShift; }
-    //! Get a physical id of the register used to pass the argument or return the value.
-    ASMJIT_INLINE uint32_t getRegId() const noexcept { return (_value & kRegIdMask) >> kRegIdShift; }
-    //! Get a stack offset of this argument (always positive).
-    ASMJIT_INLINE int32_t getStackOffset() const noexcept { return (_value & kStackOffsetMask) >> kStackOffsetShift; }
-
-    uint32_t _value;
-  };
-
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
   ASMJIT_INLINE FuncDetail() noexcept { reset(); }
-  ASMJIT_INLINE FuncDetail(const FuncDetail& other) noexcept {
-    ::memcpy(this, &other, sizeof(*this));
-  }
+  ASMJIT_INLINE FuncDetail(const FuncDetail& other) noexcept { ::memcpy(this, &other, sizeof(*this)); }
 
   // --------------------------------------------------------------------------
   // [Init / Reset]
@@ -771,39 +799,39 @@ public:
   //! Get whether the function has a return value.
   ASMJIT_INLINE bool hasRet() const noexcept { return _retCount != 0; }
   //! Get function return value.
-  ASMJIT_INLINE Value& getRet(size_t index = 0) noexcept {
+  ASMJIT_INLINE FuncValue& getRet(uint32_t index = 0) noexcept {
     ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_rets));
     return _rets[index];
   }
   //! Get function return value (const).
-  ASMJIT_INLINE const Value& getRet(size_t index = 0) const noexcept {
+  ASMJIT_INLINE const FuncValue& getRet(uint32_t index = 0) const noexcept {
     ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_rets));
     return _rets[index];
   }
 
   //! Get function arguments array.
-  ASMJIT_INLINE Value* getArgs() noexcept { return _args; }
+  ASMJIT_INLINE FuncValue* getArgs() noexcept { return _args; }
   //! Get function arguments array (const).
-  ASMJIT_INLINE const Value* getArgs() const noexcept { return _args; }
+  ASMJIT_INLINE const FuncValue* getArgs() const noexcept { return _args; }
 
-  ASMJIT_INLINE bool hasArg(size_t index) const noexcept {
+  ASMJIT_INLINE bool hasArg(uint32_t index) const noexcept {
     ASMJIT_ASSERT(index < kFuncArgCountLoHi);
     return _args[index].isInitialized();
   }
 
   //! Get function argument at index `index`.
-  ASMJIT_INLINE Value& getArg(size_t index) noexcept {
+  ASMJIT_INLINE FuncValue& getArg(uint32_t index) noexcept {
     ASMJIT_ASSERT(index < kFuncArgCountLoHi);
     return _args[index];
   }
 
   //! Get function argument at index `index`.
-  ASMJIT_INLINE const Value& getArg(size_t index) const noexcept {
+  ASMJIT_INLINE const FuncValue& getArg(uint32_t index) const noexcept {
     ASMJIT_ASSERT(index < kFuncArgCountLoHi);
     return _args[index];
   }
 
-  ASMJIT_INLINE void resetArg(size_t index) noexcept {
+  ASMJIT_INLINE void resetArg(uint32_t index) noexcept {
     ASMJIT_ASSERT(index < kFuncArgCountLoHi);
     _args[index].reset();
   }
@@ -813,21 +841,21 @@ public:
   //! Get stack size needed for function arguments passed on the stack.
   ASMJIT_INLINE uint32_t getArgStackSize() const noexcept { return _argStackSize; }
 
-  ASMJIT_INLINE uint32_t getNaturalStackAlignment() const noexcept { return _callConv.getNaturalStackAlignment(); }
-  ASMJIT_INLINE uint32_t getSpillZoneSize() const noexcept { return _callConv.getSpillZoneSize(); }
   ASMJIT_INLINE uint32_t getRedZoneSize() const noexcept { return _callConv.getRedZoneSize(); }
+  ASMJIT_INLINE uint32_t getSpillZoneSize() const noexcept { return _callConv.getSpillZoneSize(); }
+  ASMJIT_INLINE uint32_t getNaturalStackAlignment() const noexcept { return _callConv.getNaturalStackAlignment(); }
 
-  ASMJIT_INLINE uint32_t getPassedRegs(uint32_t kind) const noexcept { return _callConv.getPassedRegs(kind); }
-  ASMJIT_INLINE uint32_t getPreservedRegs(uint32_t kind) const noexcept { return _callConv.getPreservedRegs(kind); }
+  ASMJIT_INLINE uint32_t getPassedRegs(uint32_t group) const noexcept { return _callConv.getPassedRegs(group); }
+  ASMJIT_INLINE uint32_t getPreservedRegs(uint32_t group) const noexcept { return _callConv.getPreservedRegs(group); }
 
-  ASMJIT_INLINE uint32_t getUsedRegs(uint32_t kind) const noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    return _usedRegs[kind];
+  ASMJIT_INLINE uint32_t getUsedRegs(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _usedRegs[group];
   }
 
-  ASMJIT_INLINE void addUsedRegs(uint32_t kind, uint32_t regs) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    _usedRegs[kind] |= regs;
+  ASMJIT_INLINE void addUsedRegs(uint32_t group, uint32_t regs) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    _usedRegs[group] |= regs;
   }
 
   // --------------------------------------------------------------------------
@@ -837,133 +865,257 @@ public:
   CallConv _callConv;                    //!< Calling convention.
   uint8_t _argCount;                     //!< Number of function arguments.
   uint8_t _retCount;                     //!< Number of function return values.
-  uint32_t _usedRegs[kMaxVRegKinds];     //!< Registers that contains arguments (signature dependent).
+  uint32_t _usedRegs[Reg::kGroupVirt];   //!< Registers that contains arguments.
   uint32_t _argStackSize;                //!< Size of arguments passed by stack.
-  Value _rets[2];                        //!< Function return values.
-  Value _args[kFuncArgCountLoHi];        //!< Function arguments.
+  FuncValue _rets[2];                    //!< Function return values.
+  FuncValue _args[kFuncArgCountLoHi];    //!< Function arguments.
 };
 
 // ============================================================================
-// [asmjit::FuncFrameInfo]
+// [asmjit::FuncFrame]
 // ============================================================================
 
-//! Function-frame information.
+//! Function frame.
 //!
-//! This structure can be used to create a function frame in a cross-platform
-//! way. It contains information about the function's stack to be used and
-//! registers to be saved and restored. Based on this information in can
-//! calculate the optimal layout of a function as \ref FuncFrameLayout.
-struct FuncFrameInfo {
-  ASMJIT_ENUM(Limits) {
-    kMaxVRegKinds = Globals::kMaxVRegKinds
+//! Function frame is used directly by prolog and epilog insertion (PEI) utils.
+//! It provides information necessary to insert a proper and ABI comforming
+//! prolog and epilog. Function frame calculation is based on \ref CallConv and
+//! other function attributes.
+//!
+//! Function Frame Structure
+//! ------------------------
+//!
+//! Various properties can contribute to the size and structure of the function
+//! frame. The function frame in most cases won't use all of the properties
+//! illustrated (for example Spill Zone and Red Zone are never used together).
+//!
+//!   +-----------------------------+
+//!   | Arguments Passed by Stack   |
+//!   +-----------------------------+
+//!   | Spill Zone                  |
+//!   +-----------------------------+ <- Stack offset (args) starts from here.
+//!   | Return Address if Pushed    |
+//!   +-----------------------------+ <- Stack pointer (SP) upon entry.
+//!   | Save/Restore Stack.         |
+//!   +-----------------------------+-----------------------------+
+//!   | Local Stack                 |                             |
+//!   +-----------------------------+          Final Stack        |
+//!   | Call Stack                  |                             |
+//!   +-----------------------------+-----------------------------+
+//!   | Red Zone                    |
+//!   +-----------------------------+
+class FuncFrame {
+public:
+  ASMJIT_ENUM(Group) {
+    kGroupVirt = Reg::kGroupVirt
   };
 
-  //! Attributes.
-  //!
-  //! Attributes are designed in a way that all are initially false, and user
-  //! or function-frame finalizer sets them when necessary. Architecture-specific
-  //! attributes are prefixed with the architecture name.
-  ASMJIT_ENUM(Attributes) {
-    kAttrPreserveFP       = 0x00000001U, //!< Preserve frame pointer (EBP|RBP).
-    kAttrCompactPE        = 0x00000002U, //!< Use smaller, but possibly slower prolog/epilog.
-    kAttrHasCalls         = 0x00000004U, //!< Function calls other functions (is not leaf).
+  ASMJIT_ENUM(Tag) {
+    kTagInvalidOffset     = 0xFFFFFFFFU  //!< Tag used to inform that some offset is invalid.
+  };
 
-    kX86AttrAlignedVecSR  = 0x00010000U, //!< Use aligned save/restore of VEC regs.
-    kX86AttrMmxCleanup    = 0x00020000U, //!< Emit EMMS instruction in epilog (X86).
-    kX86AttrAvxCleanup    = 0x00040000U, //!< Emit VZEROUPPER instruction in epilog (X86).
-    kX86AttrAvxEnabled    = 0x00080000U  //!< Use AVX instead of SSE for all operations (X86).
+  //! Attributes are designed in a way that all are initially false, and user
+  //! or FuncFrame finalizer adds them when necessary.
+  ASMJIT_ENUM(Attributes) {
+    kAttrHasPreservedFP   = 0x00000001U, //!< Preserve frame pointer (don't omit FP).
+    kAttrHasFuncCalls     = 0x00000002U, //!< Function calls other functions (is not leaf).
+
+    kAttrX86AvxEnabled    = 0x00010000U, //!< Use AVX instead of SSE for all operations (X86).
+    kAttrX86AvxCleanup    = 0x00020000U, //!< Emit VZEROUPPER instruction in epilog (X86).
+    kAttrX86MmxCleanup    = 0x00040000U, //!< Emit EMMS instruction in epilog (X86).
+
+    kAttrAlignedVecSR     = 0x40000000U, //!< Function has aligned save/restore of vector registers.
+    kAttrIsFinalized      = 0x80000000U  //!< FuncFrame is finalized and can be used by PEI.
   };
 
   // --------------------------------------------------------------------------
   // [Construction / Destruction]
   // --------------------------------------------------------------------------
 
-  ASMJIT_INLINE FuncFrameInfo() noexcept { reset(); }
-
-  ASMJIT_INLINE FuncFrameInfo(const FuncFrameInfo& other) noexcept {
-    ::memcpy(this, &other, sizeof(*this));
-  }
+  ASMJIT_INLINE FuncFrame() noexcept { reset(); }
+  ASMJIT_INLINE FuncFrame(const FuncFrame& other) noexcept { ::memcpy(this, &other, sizeof(FuncFrame)); }
 
   // --------------------------------------------------------------------------
-  // [Init / Reset]
+  // [Init / Reset / Finalize]
   // --------------------------------------------------------------------------
+
+  ASMJIT_API Error init(const FuncDetail& func) noexcept;
+  ASMJIT_API Error finalize() noexcept;
 
   ASMJIT_INLINE void reset() noexcept {
-    ::memset(this, 0, sizeof(*this));
-    _stackArgsRegId = Globals::kInvalidRegId;
+    ::memset(this, 0, sizeof(FuncFrame));
+    _spRegId = Reg::kIdBad;
+    _saRegId = Reg::kIdBad;
+    _daOffset = kTagInvalidOffset;
   }
 
   // --------------------------------------------------------------------------
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  //! Get frame-info flags, see \ref Attributes.
+  //! Get the target architecture of the function frame.
+  ASMJIT_INLINE uint32_t getArchType() const noexcept { return _archType; }
+
+  //! Get FuncFrame attributes, see \ref Attributes.
   ASMJIT_INLINE uint32_t getAttributes() const noexcept { return _attributes; }
-  //! Check if a frame-info `flag` is set, see \ref Attributes.
+  //! Check if the FuncFame contains an attribute `attr`.
   ASMJIT_INLINE bool hasAttribute(uint32_t attr) const noexcept { return (_attributes & attr) != 0; }
-  //! Add `flags` to the frame-info, see \ref Attributes.
+  //! Add attributes `attrs` to the FuncFrame.
   ASMJIT_INLINE void addAttributes(uint32_t attrs) noexcept { _attributes |= attrs; }
-  //! Clear `flags` from the frame-info, see \ref Attributes.
+  //! Clear attributes `attrs` from the FrameFrame.
   ASMJIT_INLINE void clearAttributes(uint32_t attrs) noexcept { _attributes &= ~attrs; }
 
   //! Get if the function preserves frame pointer (EBP|ESP on X86).
-  ASMJIT_INLINE bool hasPreservedFP() const noexcept { return (_attributes & kAttrPreserveFP) != 0; }
+  ASMJIT_INLINE bool hasPreservedFP() const noexcept { return hasAttribute(kAttrHasPreservedFP); }
   //! Enable preserved frame pointer.
-  ASMJIT_INLINE void enablePreservedFP() noexcept { _attributes |= kAttrPreserveFP; }
+  ASMJIT_INLINE void setPreservedFP() noexcept { addAttributes(kAttrHasPreservedFP); }
   //! Disable preserved frame pointer.
-  ASMJIT_INLINE void disablePreservedFP() noexcept { _attributes &= ~kAttrPreserveFP; }
-
-  //! Get if the function prolog and epilog should be compacted (as small as possible).
-  ASMJIT_INLINE bool hasCompactPE() const noexcept { return (_attributes & kAttrCompactPE) != 0; }
-  //! Enable compact prolog/epilog.
-  ASMJIT_INLINE void enableCompactPE() noexcept { _attributes |= kAttrCompactPE; }
-  //! Disable compact prolog/epilog.
-  ASMJIT_INLINE void disableCompactPE() noexcept { _attributes &= ~kAttrCompactPE; }
+  ASMJIT_INLINE void resetPreservedFP() noexcept { clearAttributes(kAttrHasPreservedFP); }
 
   //! Get if the function calls other functions.
-  ASMJIT_INLINE bool hasCalls() const noexcept { return (_attributes & kAttrHasCalls) != 0; }
+  ASMJIT_INLINE bool hasFuncCalls() const noexcept { return hasAttribute(kAttrHasFuncCalls); }
   //! Set `kFlagHasCalls` to true.
-  ASMJIT_INLINE void enableCalls() noexcept { _attributes |= kAttrHasCalls; }
+  ASMJIT_INLINE void enableFuncCalls() noexcept { addAttributes(kAttrHasFuncCalls); }
   //! Set `kFlagHasCalls` to false.
-  ASMJIT_INLINE void disableCalls() noexcept { _attributes &= ~kAttrHasCalls; }
+  ASMJIT_INLINE void disableFuncCalls() noexcept { clearAttributes(kAttrHasFuncCalls); }
+
+  //! Get if the function contains AVX cleanup - 'vzeroupper' instruction in epilog.
+  ASMJIT_INLINE bool hasAvxCleanup() const noexcept { return hasAttribute(kAttrX86AvxCleanup); }
+  //! Enable AVX cleanup.
+  ASMJIT_INLINE void setAvxCleanup() noexcept { addAttributes(kAttrX86AvxCleanup); }
+  //! Disable AVX cleanup.
+  ASMJIT_INLINE void resetAvxCleanup() noexcept { clearAttributes(kAttrX86AvxCleanup); }
+
+  //! Get if the function contains AVX cleanup - 'vzeroupper' instruction in epilog.
+  ASMJIT_INLINE bool isAvxEnabled() const noexcept { return hasAttribute(kAttrX86AvxEnabled); }
+  //! Enable AVX cleanup.
+  ASMJIT_INLINE void setAvxEnabled() noexcept { addAttributes(kAttrX86AvxEnabled); }
+  //! Disable AVX cleanup.
+  ASMJIT_INLINE void resetAvxEnabled() noexcept { clearAttributes(kAttrX86AvxEnabled); }
 
   //! Get if the function contains MMX cleanup - 'emms' instruction in epilog.
-  ASMJIT_INLINE bool hasMmxCleanup() const noexcept { return (_attributes & kX86AttrMmxCleanup) != 0; }
+  ASMJIT_INLINE bool hasMmxCleanup() const noexcept { return hasAttribute(kAttrX86MmxCleanup); }
   //! Enable MMX cleanup.
-  ASMJIT_INLINE void enableMmxCleanup() noexcept { _attributes |= kX86AttrMmxCleanup; }
+  ASMJIT_INLINE void setMmxCleanup() noexcept { addAttributes(kAttrX86MmxCleanup); }
   //! Disable MMX cleanup.
-  ASMJIT_INLINE void disableMmxCleanup() noexcept { _attributes &= ~kX86AttrMmxCleanup; }
+  ASMJIT_INLINE void resetMmxCleanup() noexcept { clearAttributes(kAttrX86MmxCleanup); }
 
-  //! Get if the function contains AVX cleanup - 'vzeroupper' instruction in epilog.
-  ASMJIT_INLINE bool hasAvxCleanup() const noexcept { return (_attributes & kX86AttrAvxCleanup) != 0; }
-  //! Enable AVX cleanup.
-  ASMJIT_INLINE void enableAvxCleanup() noexcept { _attributes |= kX86AttrAvxCleanup; }
-  //! Disable AVX cleanup.
-  ASMJIT_INLINE void disableAvxCleanup() noexcept { _attributes &= ~kX86AttrAvxCleanup; }
+  //! Get if the function uses call stack.
+  ASMJIT_INLINE bool hasCallStack() const noexcept { return _callStackSize != 0; }
+  //! Get if the function uses local stack.
+  ASMJIT_INLINE bool hasLocalStack() const noexcept { return _localStackSize != 0; }
+  //! Get if vector registers can be saved and restored by using aligned writes and reads.
+  ASMJIT_INLINE bool hasAlignedVecSR() const noexcept { return hasAttribute(kAttrAlignedVecSR); }
+  //! Get if the function has to align stack dynamically.
+  ASMJIT_INLINE bool hasDynamicAlignment() const noexcept { return _finalStackAlignment >= _minimumDynamicAlignment; }
 
-  //! Get if the function contains AVX cleanup - 'vzeroupper' instruction in epilog.
-  ASMJIT_INLINE bool isAvxEnabled() const noexcept { return (_attributes & kX86AttrAvxEnabled) != 0; }
-  //! Enable AVX cleanup.
-  ASMJIT_INLINE void enableAvx() noexcept { _attributes |= kX86AttrAvxEnabled; }
-  //! Disable AVX cleanup.
-  ASMJIT_INLINE void disableAvx() noexcept { _attributes &= ~kX86AttrAvxEnabled; }
+  //! Get if this calling convention specifies 'RedZone'.
+  ASMJIT_INLINE bool hasRedZone() const noexcept { return _redZoneSize != 0; }
+  //! Get if this calling convention specifies 'SpillZone'.
+  ASMJIT_INLINE bool hasSpillZone() const noexcept { return _spillZoneSize != 0; }
 
-  //! Get which registers (by `kind`) are saved/restored in prolog/epilog, respectively.
-  ASMJIT_INLINE uint32_t getDirtyRegs(uint32_t kind) const noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    return _dirtyRegs[kind];
+  //! Get size of 'RedZone'.
+  ASMJIT_INLINE uint32_t getRedZoneSize() const noexcept { return _redZoneSize; }
+  //! Get size of 'SpillZone'.
+  ASMJIT_INLINE uint32_t getSpillZoneSize() const noexcept { return _spillZoneSize; }
+  //! Get natural stack alignment (guaranteed stack alignment upon entry).
+  ASMJIT_INLINE uint32_t getNaturalStackAlignment() const noexcept { return _naturalStackAlignment; }
+  //! Get natural stack alignment (guaranteed stack alignment upon entry).
+  ASMJIT_INLINE uint32_t getMinimumDynamicAlignment() const noexcept { return _minimumDynamicAlignment; }
+
+  //! Get if the callee must adjust SP before returning (X86-STDCALL only)
+  ASMJIT_INLINE bool hasCalleeStackCleanup() const noexcept { return _calleeStackCleanup != 0; }
+  //! Get home many bytes of the stack the the callee must adjust before returning (X86-STDCALL only)
+  ASMJIT_INLINE uint32_t getCalleeStackCleanup() const noexcept { return _calleeStackCleanup; }
+
+  //! Get call stack alignment.
+  ASMJIT_INLINE uint32_t getCallStackAlignment() const noexcept { return _callStackAlignment; }
+  //! Get local stack alignment.
+  ASMJIT_INLINE uint32_t getLocalStackAlignment() const noexcept { return _localStackAlignment; }
+  //! Get final stack alignment (the maximum value of call, local, and natural stack alignments).
+  ASMJIT_INLINE uint32_t getFinalStackAlignment() const noexcept { return _finalStackAlignment; }
+
+  //! Set call stack alignment.
+  //!
+  //! NOTE: This also updates the final stack alignment.
+  ASMJIT_INLINE void setCallStackAlignment(uint32_t alignment) noexcept {
+    _callStackAlignment = IntUtils::toUInt8(alignment);
+    _finalStackAlignment = std::max(_naturalStackAlignment, std::max(_callStackAlignment, _localStackAlignment));
   }
 
-  //! Set which registers (by `kind`) are saved/restored in prolog/epilog, respectively.
-  ASMJIT_INLINE void setDirtyRegs(uint32_t kind, uint32_t regs) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    _dirtyRegs[kind] = regs;
+  //! Set local stack alignment.
+  //!
+  //! NOTE: This also updates the final stack alignment.
+  ASMJIT_INLINE void setLocalStackAlignment(uint32_t value) noexcept {
+    _localStackAlignment = IntUtils::toUInt8(value);
+    _finalStackAlignment = std::max(_naturalStackAlignment, std::max(_callStackAlignment, _localStackAlignment));
   }
 
-  //! Add registers (by `kind`) to saved/restored registers.
-  ASMJIT_INLINE void addDirtyRegs(uint32_t kind, uint32_t regs) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    _dirtyRegs[kind] |= regs;
+  //! Combine call stack alignment with `alignment`, updating it to the greater value.
+  //!
+  //! NOTE: This also updates the final stack alignment.
+  ASMJIT_INLINE void updateCallStackAlignment(uint32_t alignment) noexcept {
+    _callStackAlignment = IntUtils::toUInt8(std::max<uint32_t>(_callStackAlignment, alignment));
+    _finalStackAlignment = std::max(_finalStackAlignment, _callStackAlignment);
+  }
+
+  //! Combine local stack alignment with `alignment`, updating it to the greater value.
+  //!
+  //! NOTE: This also updates the final stack alignment.
+  ASMJIT_INLINE void updateLocalStackAlignment(uint32_t alignment) noexcept {
+    _localStackAlignment = IntUtils::toUInt8(std::max<uint32_t>(_localStackAlignment, alignment));
+    _finalStackAlignment = std::max(_finalStackAlignment, _localStackAlignment);
+  }
+
+  //! Get call stack size.
+  ASMJIT_INLINE uint32_t getCallStackSize() const noexcept { return _callStackSize; }
+  //! Get local stack size.
+  ASMJIT_INLINE uint32_t getLocalStackSize() const noexcept { return _localStackSize; }
+
+  //! Set call stack size.
+  ASMJIT_INLINE void setCallStackSize(uint32_t size) noexcept { _callStackSize = size; }
+  //! Set local stack size.
+  ASMJIT_INLINE void setLocalStackSize(uint32_t size) noexcept { _localStackSize = size; }
+
+  //! Combine call stack size with `size`, updating it to the greater value.
+  ASMJIT_INLINE void updateCallStackSize(uint32_t size) noexcept { _callStackSize = std::max(_callStackSize, size); }
+  //! Combine local stack size with `size`, updating it to the greater value.
+  ASMJIT_INLINE void updateLocalStackSize(uint32_t size) noexcept { _localStackSize = std::max(_localStackSize, size); }
+
+  //! Get final stack size (only valid after the FuncFrame is finalized).
+  ASMJIT_INLINE uint32_t getFinalStackSize() const noexcept { return _finalStackSize; }
+
+  //! Get an offset to access the local stack (non-zero only if call stack is used).
+  ASMJIT_INLINE uint32_t getLocalStackOffset() const noexcept { return _localStackOffset; }
+
+  //! Get if the function prolog/epilog requires a memory slot for storing unaligned SP.
+  ASMJIT_INLINE bool hasDAOffset() const noexcept { return _daOffset != kTagInvalidOffset; }
+  //! Get a memory offset used to store DA (dynamic alignment) slot (relative to SP).
+  ASMJIT_INLINE uint32_t getDAOffset() const noexcept { return _daOffset; }
+
+  ASMJIT_INLINE uint32_t getSAOffset(uint32_t regId) const noexcept {
+    return regId == _spRegId ? getSAOffsetFromSP() : getSAOffsetFromSA();
+  }
+
+  ASMJIT_INLINE uint32_t getSAOffsetFromSP() const noexcept { return _saOffsetFromSP; }
+  ASMJIT_INLINE uint32_t getSAOffsetFromSA() const noexcept { return _saOffsetFromSA; }
+
+  //! Get which registers (by `group`) are saved/restored in prolog/epilog, respectively.
+  ASMJIT_INLINE uint32_t getDirtyRegs(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _dirtyRegs[group];
+  }
+
+  //! Set which registers (by `group`) are saved/restored in prolog/epilog, respectively.
+  ASMJIT_INLINE void setDirtyRegs(uint32_t group, uint32_t regs) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    _dirtyRegs[group] = regs;
+  }
+
+  //! Add registers (by `group`) to saved/restored registers.
+  ASMJIT_INLINE void addDirtyRegs(uint32_t group, uint32_t regs) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    _dirtyRegs[group] |= regs;
   }
 
   ASMJIT_INLINE void setAllDirty() noexcept {
@@ -973,224 +1125,104 @@ struct FuncFrameInfo {
     _dirtyRegs[3] = 0xFFFFFFFFU;
   }
 
-  ASMJIT_INLINE void setAllDirty(uint32_t kind) noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    _dirtyRegs[kind] = 0xFFFFFFFFU;
+  ASMJIT_INLINE void setAllDirty(uint32_t group) noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    _dirtyRegs[group] = 0xFFFFFFFFU;
   }
 
-  //! Get stack-frame size used by the function.
-  ASMJIT_INLINE uint32_t getStackFrameSize() const noexcept { return _stackFrameSize; }
-  //! Get call-frame size used by the function.
-  ASMJIT_INLINE uint32_t getCallFrameSize() const noexcept { return _callFrameSize; }
-
-  //! Get minimum stack-frame alignment required by the function.
-  ASMJIT_INLINE uint32_t getStackFrameAlignment() const noexcept { return _stackFrameAlignment; }
-  //! Get minimum call-frame alignment required by the function.
-  ASMJIT_INLINE uint32_t getCallFrameAlignment() const noexcept { return _callFrameAlignment; }
-
-  ASMJIT_INLINE void setStackFrameSize(uint32_t size) noexcept { _stackFrameSize = size; }
-  ASMJIT_INLINE void setCallFrameSize(uint32_t size) noexcept { _callFrameSize = size; }
-
-  ASMJIT_INLINE void setStackFrameAlignment(uint32_t value) noexcept {
-    ASMJIT_ASSERT(value < 256);
-    _stackFrameAlignment = static_cast<uint8_t>(value);
+  ASMJIT_INLINE uint32_t getSavedRegs(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _dirtyRegs[group] & _preservedRegs[group];
   }
 
-  ASMJIT_INLINE void setCallFrameAlignment(uint32_t value) noexcept {
-    ASMJIT_ASSERT(value < 256);
-    _callFrameAlignment = static_cast<uint8_t>(value);
+  ASMJIT_INLINE uint32_t getPreservedRegs(uint32_t group) const noexcept {
+    ASMJIT_ASSERT(group < Reg::kGroupVirt);
+    return _preservedRegs[group];
   }
 
-  ASMJIT_INLINE void mergeStackFrameSize(uint32_t size) noexcept { _stackFrameSize = std::max<uint32_t>(_stackFrameSize, size); }
-  ASMJIT_INLINE void mergeCallFrameSize(uint32_t size) noexcept { _callFrameSize = std::max<uint32_t>(_callFrameSize, size); }
+  ASMJIT_INLINE bool hasSARegId() const noexcept { return _saRegId != Reg::kIdBad; }
+  ASMJIT_INLINE uint32_t getSARegId() const noexcept { return _saRegId; }
+  ASMJIT_INLINE void setSARegId(uint32_t regId) { _saRegId = IntUtils::toUInt8(regId); }
+  ASMJIT_INLINE void resetSARegId() { setSARegId(Reg::kIdBad); }
 
-  ASMJIT_INLINE void mergeStackFrameAlignment(uint32_t value) noexcept {
-    ASMJIT_ASSERT(value < 256);
-    _stackFrameAlignment = static_cast<uint8_t>(std::max<uint32_t>(_stackFrameAlignment, value));
-  }
+  //! Get stack size required to save GP registers.
+  ASMJIT_INLINE uint32_t getGpSaveSize() const noexcept { return _gpSaveSize; }
+  //! Get stack size required to save other than GP registers (MM, XMM|YMM|ZMM, K, VFP, etc...).
+  ASMJIT_INLINE uint32_t getNonGpSaveSize() const noexcept { return _nonGpSaveSize; }
 
-  ASMJIT_INLINE void mergeCallFrameAlignment(uint32_t value) noexcept {
-    ASMJIT_ASSERT(value < 256);
-    _callFrameAlignment = static_cast<uint8_t>(std::max<uint32_t>(_callFrameAlignment, value));
-  }
+  ASMJIT_INLINE uint32_t getGpSaveOffset() const noexcept { return _gpSaveOffset; }
+  ASMJIT_INLINE uint32_t getNonGpSaveOffset() const noexcept { return _nonGpSaveOffset; }
 
-  ASMJIT_INLINE bool hasStackArgsRegId() const noexcept {
-    return _stackArgsRegId != Globals::kInvalidRegId;
-  }
-  ASMJIT_INLINE uint32_t getStackArgsRegId() const noexcept { return _stackArgsRegId; }
-  ASMJIT_INLINE void setStackArgsRegId(uint32_t regId) { _stackArgsRegId = regId; }
+  ASMJIT_INLINE bool hasStackAdjustment() const noexcept { return _stackAdjustment != 0; }
+  ASMJIT_INLINE uint32_t getStackAdjustment() const noexcept { return _stackAdjustment; }
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
   uint32_t _attributes;                  //!< Function attributes.
-  uint32_t _dirtyRegs[kMaxVRegKinds];    //!< Registers used by the function.
 
-  uint8_t _stackFrameAlignment;          //!< Minimum alignment of stack-frame.
-  uint8_t _callFrameAlignment;           //!< Minimum alignment of call-frame.
-  uint8_t _stackArgsRegId;               //!< Register that holds base-address to arguments passed by stack.
+  uint8_t _archType;                     //!< Architecture.
+  uint8_t _spRegId;                      //!< SP register ID (to access call stack and local stack).
+  uint8_t _saRegId;                      //!< SA register ID (to access stack arguments).
 
-  uint32_t _stackFrameSize;              //!< Size of a stack-frame used by the function.
-  uint32_t _callFrameSize;               //!< Size of a call-frame (not part of _stackFrameSize).
+  uint8_t _redZoneSize;                  //!< Red zone size (copied from CallConv).
+  uint8_t _spillZoneSize;                //!< Spill zone size (copied from CallConv).
+  uint8_t _naturalStackAlignment;        //!< Natural stack alignment (copied from CallConv).
+  uint8_t _minimumDynamicAlignment;      //!< Minimum stack alignment to turn on dynamic alignment.
+
+  uint8_t _callStackAlignment;           //!< Call stack alignment.
+  uint8_t _localStackAlignment;          //!< Local stack alignment.
+  uint8_t _finalStackAlignment;          //!< Final stack alignment.
+
+  uint16_t _calleeStackCleanup;          //!< Adjustment of the stack before returning (X86-STDCALL).
+
+  uint32_t _callStackSize;               //!< Call stack size.
+  uint32_t _localStackSize;              //!< Local stack size.
+  uint32_t _finalStackSize;              //!< Final stack size (sum of call stack and local stack).
+
+  uint32_t _localStackOffset;            //!< Local stack offset (non-zero only call stack is used).
+  uint32_t _daOffset;                    //!< Offset relative to SP that contains previous SP (before alignment).
+  uint32_t _saOffsetFromSP;              //!< Offset of the first stack argument relative to SP.
+  uint32_t _saOffsetFromSA;              //!< Offset of the first stack argument relative to SA (_saRegId or FP).
+
+  uint32_t _stackAdjustment;             //!< Local stack adjustment in prolog/epilog.
+
+  uint32_t _dirtyRegs[Reg::kGroupVirt];     //!< Registers that are dirty.
+  uint32_t _preservedRegs[Reg::kGroupVirt]; //!< Registers that must be preserved (copied from CallConv).
+
+  uint16_t _gpSaveSize;                  //!< Final stack size required to save GP regs.
+  uint16_t _nonGpSaveSize;               //!< Final Stack size required to save other than GP regs.
+  uint32_t _gpSaveOffset;                //!< Final offset where saved GP regs are stored.
+  uint32_t _nonGpSaveOffset;             //!< Final offset where saved other than GP regs are stored.
 };
 
 // ============================================================================
-// [asmjit::FuncFrameLayout]
+// [asmjit::FuncArgsAssignment]
 // ============================================================================
 
-//! Function-frame layout.
-//!
-//! Function layout is used directly by prolog and epilog insertion helpers. It
-//! contains only information necessary to insert proper prolog and epilog, and
-//! should be always calculated from \ref FuncDetail and \ref FuncFrameInfo, where
-//! \ref FuncDetail defines function's calling convention and signature, and \ref
-//! FuncFrameInfo specifies how much stack is used, and which registers are dirty.
-struct FuncFrameLayout {
-  ASMJIT_ENUM(Limits) {
-    kMaxVRegKinds = Globals::kMaxVRegKinds
+//! A helper class that can be used to assign a physical register for each
+//! function argument. Use with `CodeEmitter::emitArgsAssignment()`.
+class FuncArgsAssignment {
+public:
+  enum {
+    kArgCount = kFuncArgCountLoHi
   };
+
+  explicit ASMJIT_INLINE FuncArgsAssignment(const FuncDetail* fd = nullptr) noexcept { reset(fd); }
+
+  ASMJIT_INLINE FuncArgsAssignment(const FuncArgsAssignment& other) noexcept {
+    ::memcpy(this, &other, sizeof(*this));
+  }
 
   // --------------------------------------------------------------------------
   // [Init / Reset]
   // --------------------------------------------------------------------------
 
-  ASMJIT_API Error init(const FuncDetail& func, const FuncFrameInfo& ffi) noexcept;
-  ASMJIT_INLINE void reset() noexcept { ::memset(this, 0, sizeof(*this)); }
-
-  // --------------------------------------------------------------------------
-  // [Accessors]
-  // --------------------------------------------------------------------------
-
-  ASMJIT_INLINE bool hasPreservedFP() const noexcept { return static_cast<bool>(_preservedFP); }
-  ASMJIT_INLINE bool hasDsaSlotUsed() const noexcept { return static_cast<bool>(_dsaSlotUsed); }
-  ASMJIT_INLINE bool hasAlignedVecSR() const noexcept { return static_cast<bool>(_alignedVecSR); }
-  ASMJIT_INLINE bool hasDynamicAlignment() const noexcept { return static_cast<bool>(_dynamicAlignment); }
-
-  ASMJIT_INLINE bool hasMmxCleanup() const noexcept { return static_cast<bool>(_mmxCleanup); }
-  ASMJIT_INLINE bool hasAvxCleanup() const noexcept { return static_cast<bool>(_avxCleanup); }
-  ASMJIT_INLINE bool isAvxEnabled() const noexcept { return static_cast<bool>(_avxEnabled); }
-
-  ASMJIT_INLINE uint32_t getSavedRegs(uint32_t kind) const noexcept {
-    ASMJIT_ASSERT(kind < kMaxVRegKinds);
-    return _savedRegs[kind];
-  }
-
-  //! Get stack size.
-  ASMJIT_INLINE uint32_t getStackSize() const noexcept { return _stackSize; }
-  //! Get stack alignment.
-  ASMJIT_INLINE uint32_t getStackAlignment() const noexcept { return _stackAlignment; }
-  //! Get the offset needed to access the function's stack (it skips call-stack).
-  ASMJIT_INLINE uint32_t getStackBaseOffset() const noexcept { return _stackBaseOffset; }
-
-  //! Get stack size required to save GP registers.
-  ASMJIT_INLINE uint32_t getGpStackSize() const noexcept { return _gpStackSize; }
-  //! Get stack size required to save VEC registers.
-  ASMJIT_INLINE uint32_t getVecStackSize() const noexcept { return _vecStackSize; }
-
-  ASMJIT_INLINE uint32_t getGpStackOffset() const noexcept { return _gpStackOffset; }
-  ASMJIT_INLINE uint32_t getVecStackOffset() const noexcept { return _vecStackOffset; }
-
-  ASMJIT_INLINE uint32_t getStackArgsRegId() const noexcept { return _stackArgsRegId; }
-  ASMJIT_INLINE uint32_t getStackArgsOffset() const noexcept { return _stackArgsOffset; }
-
-  ASMJIT_INLINE bool hasStackAdjustment() const noexcept { return _stackAdjustment != 0; }
-  ASMJIT_INLINE uint32_t getStackAdjustment() const noexcept { return _stackAdjustment; }
-
-  ASMJIT_INLINE bool hasCalleeStackCleanup() const noexcept { return _calleeStackCleanup != 0; }
-  ASMJIT_INLINE uint32_t getCalleeStackCleanup() const noexcept { return _calleeStackCleanup; }
-
-  // --------------------------------------------------------------------------
-  // [Members]
-  // --------------------------------------------------------------------------
-
-  uint8_t _stackAlignment;               //!< Final stack alignment of the functions.
-  uint8_t _stackBaseRegId;               //!< GP register that holds address of base stack address.
-  uint8_t _stackArgsRegId;               //!< GP register that holds address of the first argument passed by stack.
-
-  uint32_t _savedRegs[kMaxVRegKinds];    //!< Registers that will be saved/restored in prolog/epilog.
-
-  uint32_t _preservedFP : 1;             //!< Function preserves frame-pointer.
-  uint32_t _dsaSlotUsed : 1;             //!< True if `_dsaSlot` contains a valid memory slot/offset.
-  uint32_t _alignedVecSR : 1;            //!< Use instructions that perform aligned ops to save/restore XMM regs.
-  uint32_t _dynamicAlignment : 1;        //!< Function must dynamically align the stack.
-
-  uint32_t _mmxCleanup : 1;              //!< Emit 'emms' in epilog (X86).
-  uint32_t _avxCleanup : 1;              //!< Emit 'vzeroupper' in epilog (X86).
-  uint32_t _avxEnabled : 1;              //!< Use AVX instead of SSE for SIMD saves/restores (X86).
-
-  uint32_t _stackSize;                   //!< Stack size (sum of function's stack and call stack).
-  uint32_t _stackBaseOffset;             //!< Stack offset (non-zero if kFlagHasCalls is set).
-  uint32_t _stackAdjustment;             //!< Stack adjustment in prolog/epilog.
-  uint32_t _stackArgsOffset;             //!< Offset to the first argument passed by stack of _stackArgsRegId.
-
-  uint32_t _dsaSlot;                     //!< Memory slot where the prolog inserter stores previous (unaligned) ESP.
-  uint16_t _calleeStackCleanup;          //!< How many bytes the callee should add to the stack (X86 STDCALL).
-  uint16_t _gpStackSize;                 //!< Stack size required to save GP regs.
-  uint16_t _vecStackSize;                //!< Stack size required to save VEC regs.
-  uint32_t _gpStackOffset;               //!< Offset where saved GP regs are stored.
-  uint32_t _vecStackOffset;              //!< Offset where saved GP regs are stored.
-};
-
-// ============================================================================
-// [asmjit::FuncArgsMapper]
-// ============================================================================
-
-//! Assign a physical register to each function argument.
-//!
-//! This is used to specify where each function argument should be shuffled
-//! or allocated (in case it's passed by stack).
-class FuncArgsMapper {
-public:
-  struct Value {
-    // NOTE: The layout is compatible with FuncDetail::Value except stack.
-    ASMJIT_ENUM(Parts) {
-      kTypeIdShift      = 24,
-      kTypeIdMask       = 0xFF000000U,
-
-      kRegTypeShift     = 8,
-      kRegTypeMask      = 0x0000FF00U,
-
-      kRegIdShift       = 0,
-      kRegIdMask        = 0x000000FFU,
-
-      kIsAssigned       = 0x00010000U
-    };
-
-    //! Get if this value is initialized (i.e. contains a valid data).
-    ASMJIT_INLINE bool isAssigned() const noexcept { return _value != 0; }
-    //! Initialize this in/out by a given `typeId`, `regType`, and `regId`.
-    ASMJIT_INLINE void assign(uint32_t typeId, uint32_t regType, uint32_t regId) noexcept {
-      _value = (typeId << kTypeIdShift) | (regType << kRegTypeShift) | (regId << kRegIdShift) | kIsAssigned;
-    }
-    //! Reset the value to its unassigned state.
-    ASMJIT_INLINE void reset() noexcept { _value = 0; }
-
-    //! Get virtual type of this argument or return value.
-    ASMJIT_INLINE uint32_t getTypeId() const noexcept { return _value >> kTypeIdShift; }
-    //! Get a register type of the register used to pass the argument or return the value.
-    ASMJIT_INLINE uint32_t getRegType() const noexcept { return (_value & kRegTypeMask) >> kRegTypeShift; }
-    //! Get a physical id of the register used to pass the argument or return the value.
-    ASMJIT_INLINE uint32_t getRegId() const noexcept { return (_value & kRegIdMask) >> kRegIdShift; }
-
-    uint32_t _value;
-  };
-
-  // --------------------------------------------------------------------------
-  // [Construction / Destruction]
-  // --------------------------------------------------------------------------
-
-  explicit ASMJIT_INLINE FuncArgsMapper(const FuncDetail* fd) noexcept { reset(fd); }
-  ASMJIT_INLINE FuncArgsMapper(const FuncArgsMapper& other) noexcept {
-    ::memcpy(this, &other, sizeof(*this));
-  }
-
-  // --------------------------------------------------------------------------
-  // [Reset]
-  // --------------------------------------------------------------------------
-
   ASMJIT_INLINE void reset(const FuncDetail* fd = nullptr) noexcept {
     _funcDetail = fd;
+    _saRegId = static_cast<uint8_t>(Reg::kIdBad);
+    ::memset(_reserved, 0, sizeof(_reserved));
     ::memset(_args, 0, sizeof(_args));
   }
 
@@ -1201,26 +1233,34 @@ public:
   ASMJIT_INLINE const FuncDetail* getFuncDetail() const noexcept { return _funcDetail; }
   ASMJIT_INLINE void setFuncDetail(const FuncDetail* fd) noexcept { _funcDetail = fd; }
 
-  ASMJIT_INLINE Value& getArg(size_t index) noexcept {
+  ASMJIT_INLINE bool hasSARegId() const noexcept { return _saRegId != Reg::kIdBad; }
+  ASMJIT_INLINE uint32_t getSARegId() const noexcept { return _saRegId; }
+  ASMJIT_INLINE void setSARegId(uint32_t regId) { _saRegId = IntUtils::toUInt8(regId); }
+  ASMJIT_INLINE void resetSARegId() { _saRegId = static_cast<uint8_t>(Reg::kIdBad); }
+
+  ASMJIT_INLINE FuncValue& getArg(uint32_t index) noexcept {
     ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_args));
     return _args[index];
   }
-  ASMJIT_INLINE const Value& getArg(size_t index) const noexcept {
+  ASMJIT_INLINE const FuncValue& getArg(uint32_t index) const noexcept {
     ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_args));
     return _args[index];
   }
 
-  ASMJIT_INLINE bool isAssigned(size_t index) const noexcept {
+  ASMJIT_INLINE bool isAssigned(uint32_t index) const noexcept {
     ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_args));
     return _args[index].isAssigned();
   }
 
-  ASMJIT_INLINE void assign(size_t index, const Reg& reg, uint32_t typeId = TypeId::kVoid) noexcept {
-    // Not designed for virtual registers.
+  ASMJIT_INLINE void assignReg(uint32_t index, const Reg& reg, uint32_t typeId = TypeId::kVoid) noexcept {
     ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_args));
     ASMJIT_ASSERT(reg.isPhysReg());
+    _args[index].initReg(reg.getType(), reg.getId(), typeId);
+  }
 
-    _args[index].assign(typeId, reg.getType(), reg.getId());
+  ASMJIT_INLINE void assignReg(uint32_t index, uint32_t regType, uint32_t regId, uint32_t typeId = TypeId::kVoid) noexcept {
+    ASMJIT_ASSERT(index < ASMJIT_ARRAY_SIZE(_args));
+    _args[index].initReg(regType, regId, typeId);
   }
 
   // NOTE: All `assignAll()` methods are shortcuts to assign all arguments at
@@ -1228,61 +1268,84 @@ public:
   // don't provide any way to pass TypeId and/or to keep any argument between
   // the arguments passed uninitialized.
   ASMJIT_INLINE void assignAll(const Reg& a0) noexcept {
-    assign(0, a0);
+    assignReg(0, a0);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1) noexcept {
-    assign(0, a0); assign(1, a1);
+    assignReg(0, a0);
+    assignReg(1, a1);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1, const Reg& a2) noexcept {
-    assign(0, a0); assign(1, a1); assign(2, a2);
+    assignReg(0, a0);
+    assignReg(1, a1);
+    assignReg(2, a2);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1, const Reg& a2, const Reg& a3) noexcept {
-    assign(0, a0); assign(1, a1); assign(2, a2); assign(3, a3);
+    assignReg(0, a0);
+    assignReg(1, a1);
+    assignReg(2, a2);
+    assignReg(3, a3);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1, const Reg& a2, const Reg& a3, const Reg& a4) noexcept {
-    assign(0, a0); assign(1, a1); assign(2, a2); assign(3, a3);
-    assign(4, a4);
+    assignReg(0, a0);
+    assignReg(1, a1);
+    assignReg(2, a2);
+    assignReg(3, a3);
+    assignReg(4, a4);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1, const Reg& a2, const Reg& a3, const Reg& a4, const Reg& a5) noexcept {
-    assign(0, a0); assign(1, a1); assign(2, a2); assign(3, a3);
-    assign(4, a4); assign(5, a5);
+    assignReg(0, a0);
+    assignReg(1, a1);
+    assignReg(2, a2);
+    assignReg(3, a3);
+    assignReg(4, a4);
+    assignReg(5, a5);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1, const Reg& a2, const Reg& a3, const Reg& a4, const Reg& a5, const Reg& a6) noexcept {
-    assign(0, a0); assign(1, a1); assign(2, a2); assign(3, a3);
-    assign(4, a4); assign(5, a5); assign(6, a6);
+    assignReg(0, a0);
+    assignReg(1, a1);
+    assignReg(2, a2);
+    assignReg(3, a3);
+    assignReg(4, a4);
+    assignReg(5, a5);
+    assignReg(6, a6);
   }
+
   ASMJIT_INLINE void assignAll(const Reg& a0, const Reg& a1, const Reg& a2, const Reg& a3, const Reg& a4, const Reg& a5, const Reg& a6, const Reg& a7) noexcept {
-    assign(0, a0); assign(1, a1); assign(2, a2); assign(3, a3);
-    assign(4, a4); assign(5, a5); assign(6, a6); assign(7, a7);
+    assignReg(0, a0);
+    assignReg(1, a1);
+    assignReg(2, a2);
+    assignReg(3, a3);
+    assignReg(4, a4);
+    assignReg(5, a5);
+    assignReg(6, a6);
+    assignReg(7, a7);
   }
 
   // --------------------------------------------------------------------------
   // [Utilities]
   // --------------------------------------------------------------------------
 
-  //! Update `FuncFrameInfo` accordingly to FuncArgsMapper.
+  //! Update `FuncFrame` based on function's arguments assignment.
   //!
-  //! This method must be called if you use `FuncArgsMapper` and you plan to
-  //! use `FuncUtils::allocArgs()` to remap all arguments after the prolog is
-  //! inserted.
-  ASMJIT_API Error updateFrameInfo(FuncFrameInfo& ffi) const noexcept;
+  //! NOTE: You MUST call this in orher to use `CodeEmitter::emitArgsAssignment()`,
+  //! otherwise the FuncFrame would not contain the information necessary to
+  //! assign all arguments into the registers and/or stack specified.
+  ASMJIT_API Error updateFuncFrame(FuncFrame& frame) const noexcept;
 
   // --------------------------------------------------------------------------
   // [Members]
   // --------------------------------------------------------------------------
 
   const FuncDetail* _funcDetail;         //!< Function detail.
-  Value _args[kFuncArgCountLoHi];        //!< Mapping of each function argument.
-};
-
-// ============================================================================
-// [asmjit::FuncUtils]
-// ============================================================================
-
-struct FuncUtils {
-  ASMJIT_API static Error emitProlog(CodeEmitter* emitter, const FuncFrameLayout& layout);
-  ASMJIT_API static Error emitEpilog(CodeEmitter* emitter, const FuncFrameLayout& layout);
-  ASMJIT_API static Error allocArgs(CodeEmitter* emitter, const FuncFrameLayout& layout, const FuncArgsMapper& args);
+  uint8_t _saRegId;                      //!< Register that can be used to access arguments passed by stack.
+  uint8_t _reserved[3];                  //!< \internal
+  FuncValue _args[kArgCount];            //!< Mapping of each function argument.
 };
 
 //! \}

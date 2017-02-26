@@ -27,13 +27,14 @@ namespace asmjit {
 // ============================================================================
 
 class CodeEmitter;
+class Logger;
 class Reg;
 struct Operand_;
 
 #if !defined(ASMJIT_DISABLE_BUILDER)
 class CodeBuilder;
 class CBNode;
-#endif // !ASMJIT_DISABLE_BUILDER
+#endif
 
 // ============================================================================
 // [asmjit::Logger]
@@ -58,10 +59,13 @@ public:
 
   //! Logger options.
   ASMJIT_ENUM(Options) {
-    kOptionBinaryForm      = 0x00000001, //! Output instructions also in binary form.
-    kOptionImmExtended     = 0x00000002, //! Output a meaning of some immediates.
-    kOptionHexImmediate    = 0x00000004, //! Output constants in hexadecimal form.
-    kOptionHexDisplacement = 0x00000008  //! Output displacements in hexadecimal form.
+    kOptionBinaryForm      = 0x00000001, //!< Show also binary form of each logged instruction.
+    kOptionExplainConsts   = 0x00000002, //!< Show a text explanation of some constants.
+    kOptionHexConsts       = 0x00000004, //!< Use hexadecimal notation to output constants.
+    kOptionHexOffsets      = 0x00000008, //!< Use hexadecimal notation to output offsets.
+    kOptionAnnotate        = 0x00000010, //!< Annotate nodes that are lowered by CodeCompiler passes.
+    kOptionNodePosition    = 0x00000020, //!< Show a node position (if any) of CodeBuilder/CodeCompiler instructions.
+    kOptionDebugPasses     = 0x00000010  //!< Show an additional output from CodeBuilder/CodeCompiler passes.
   };
 
   // --------------------------------------------------------------------------
@@ -81,7 +85,7 @@ public:
   virtual Error _log(const char* str, size_t len) noexcept = 0;
 
   //! Log a string `str`, which is either null terminated or having `len` length.
-  ASMJIT_INLINE Error log(const char* str, size_t len = Globals::kInvalidIndex) noexcept { return _log(str, len); }
+  ASMJIT_INLINE Error log(const char* str, size_t len = Globals::kNullTerminated) noexcept { return _log(str, len); }
   //! Log a content of a `StringBuilder` `str`.
   ASMJIT_INLINE Error log(const StringBuilder& str) noexcept { return _log(str.getData(), str.getLength()); }
 
@@ -161,7 +165,7 @@ public:
   // [Logging]
   // --------------------------------------------------------------------------
 
-  ASMJIT_API Error _log(const char* buf, size_t len = Globals::kInvalidIndex) noexcept override;
+  ASMJIT_API Error _log(const char* buf, size_t len = Globals::kNullTerminated) noexcept override;
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -207,7 +211,7 @@ public:
   // [Logging]
   // --------------------------------------------------------------------------
 
-  ASMJIT_API Error _log(const char* buf, size_t len = Globals::kInvalidIndex) noexcept override;
+  ASMJIT_API Error _log(const char* buf, size_t len = Globals::kNullTerminated) noexcept override;
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -248,7 +252,7 @@ struct Logging {
     uint32_t logOptions,
     const CodeEmitter* emitter,
     uint32_t archType,
-    const Inst::Detail& detail, const Operand_* opArray, uint32_t opCount) noexcept;
+    const Inst::Detail& detail, const Operand_* operands, uint32_t count) noexcept;
 
 #if !defined(ASMJIT_DISABLE_BUILDER)
   ASMJIT_API static Error formatNode(
@@ -256,9 +260,9 @@ struct Logging {
     uint32_t logOptions,
     const CodeBuilder* cb,
     const CBNode* node_) noexcept;
-#endif // !ASMJIT_DISABLE_BUILDER
+#endif
 
-// Only used by AsmJit internals, not available to users.
+  // Only used by AsmJit internals, not available to users.
 #if defined(ASMJIT_EXPORTS)
   enum {
     // Has to be big to be able to hold all metadata compiler can assign to a
@@ -271,11 +275,9 @@ struct Logging {
   static Error formatLine(
     StringBuilder& sb,
     const uint8_t* binData, size_t binLen, size_t dispLen, size_t imLen, const char* comment) noexcept;
-#endif // ASMJIT_EXPORTS
+#endif
 };
-#else
-class Logger;
-#endif // !ASMJIT_DISABLE_LOGGING
+#endif
 
 //! \}
 

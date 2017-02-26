@@ -10,7 +10,8 @@
 
 // [Dependencies]
 #include "../base/codeholder.h"
-#include "../base/vmem.h"
+#include "../base/intutils.h"
+#include "../base/virtmem.h"
 
 // [Api-Begin]
 #include "../asmjit_apibegin.h"
@@ -76,14 +77,10 @@ public:
   // virtual methods are prefixed with `_` and called from templates.
 
   template<typename Func>
-  ASMJIT_INLINE Error add(Func* dst, CodeHolder* code) noexcept {
-    return _add(Internal::ptr_cast<void**, Func*>(dst), code);
-  }
+  ASMJIT_INLINE Error add(Func* dst, CodeHolder* code) noexcept { return _add(AsmJitInternal::ptr_cast<void**, Func*>(dst), code); }
 
   template<typename Func>
-  ASMJIT_INLINE Error release(Func dst) noexcept {
-    return _release(Internal::ptr_cast<void*, Func>(dst));
-  }
+  ASMJIT_INLINE Error release(Func dst) noexcept { return _release(AsmJitInternal::ptr_cast<void*, Func>(dst)); }
 
   //! Allocate a memory needed for a code stored in the \ref CodeHolder and
   //! relocate it to the target location.
@@ -167,10 +164,10 @@ public:
   //! Get the type of allocation.
   ASMJIT_INLINE uint32_t getAllocType() const noexcept { return _allocType; }
   //! Set the type of allocation.
-  ASMJIT_INLINE void setAllocType(uint32_t allocType) noexcept { _allocType = allocType; }
+  ASMJIT_INLINE void setAllocType(uint32_t allocType) noexcept { _allocType = IntUtils::toUInt8(allocType); }
 
   //! Get the virtual memory manager.
-  ASMJIT_INLINE VMemMgr* getMemMgr() const noexcept { return const_cast<VMemMgr*>(&_memMgr); }
+  ASMJIT_INLINE VirtMem* getMemMgr() const noexcept { return const_cast<VirtMem*>(&_memMgr); }
 
   // --------------------------------------------------------------------------
   // [Interface]
@@ -184,7 +181,7 @@ public:
   // --------------------------------------------------------------------------
 
   //! Virtual memory manager.
-  VMemMgr _memMgr;
+  VirtMem _memMgr;
 };
 
 //! \}

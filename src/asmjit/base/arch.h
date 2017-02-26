@@ -104,11 +104,6 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
-  //! Get if the architecture is 32-bit.
-  ASMJIT_INLINE bool is32Bit() const noexcept { return _gpSize == 4; }
-  //! Get if the architecture is 64-bit.
-  ASMJIT_INLINE bool is64Bit() const noexcept { return _gpSize == 8; }
-
   //! Get architecture type, see \ref Type.
   ASMJIT_INLINE uint32_t getType() const noexcept { return _type; }
 
@@ -120,18 +115,18 @@ public:
   //! Architecture subtype describe the highest instruction-set level that can
   //! be used.
   //!
-  //! ARM32
-  //! -----
+  //! A32 & A64
+  //! ---------
   //!
   //! Architecture mode means the instruction encoding to be used when generating
   //! machine code, thus mode can be used to force generation of THUMB and THUMB2
   //! encoding or regular ARM encoding.
-  //!
-  //! ARM64
-  //! -----
-  //!
-  //! No meaning yet.
   ASMJIT_INLINE uint32_t getSubType() const noexcept { return _subType; }
+
+  //! Get if the architecture is 32-bit.
+  ASMJIT_INLINE bool is32Bit() const noexcept { return _gpSize == 4; }
+  //! Get if the architecture is 64-bit.
+  ASMJIT_INLINE bool is64Bit() const noexcept { return _gpSize == 8; }
 
   //! Get if the architecture is X86, X64, or X32.
   ASMJIT_INLINE bool isX86Family() const noexcept { return isX86Family(_type); }

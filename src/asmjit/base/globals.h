@@ -23,26 +23,25 @@ namespace asmjit {
 // [asmjit::Globals]
 // ============================================================================
 
-enum { kInvalidValue = 0xFFFFFFFFU };
-
 //! AsmJit globals.
 namespace Globals {
 
-//! Invalid index
-//!
-//! Invalid index is the last possible index that is never used in practice. In
-//! AsmJit it is used exclusively with strings to indicate the the length of the
-//! string is not known and has to be determined.
-static const size_t kInvalidIndex = ~static_cast<size_t>(0);
+//! Storage used to store a pack of bits (should by compatible with a machine word).
+typedef uintptr_t BitWord;
+//! Number of bits stored in `BitWord`.
+enum { kBitWordSize = static_cast<int>(sizeof(BitWord)) * 8 };
+
+//! Returned by `indexOf()` and similar when working with containers that use 32-bit index/length.
+static const uint32_t kNotFound = ~static_cast<uint32_t>(0);
+
+//! The length of the string is not known, but the string is null terminated.
+static const size_t kNullTerminated = ~static_cast<size_t>(0);
 
 //! Invalid base address.
 static const uint64_t kNoBaseAddress = ~static_cast<uint64_t>(0);
 
 //! Global definitions.
 ASMJIT_ENUM(Defs) {
-  //! Invalid register id.
-  kInvalidRegId = 0xFF,
-
   //! Host memory allocator overhead.
   kAllocOverhead = static_cast<int>(sizeof(intptr_t) * 4),
   //! Aggressive growing strategy threshold.
@@ -50,18 +49,8 @@ ASMJIT_ENUM(Defs) {
 };
 
 ASMJIT_ENUM(Limits) {
-  //! Count of register kinds that are important to Function API and CodeCompiler.
-  //! The target architecture can define more register kinds for special registers,
-  //! but these will never map to virtual registers and will never be used to pass
-  //! and return function arguments and function return values, respectively.
-  kMaxVRegKinds = 4,
-
-  //! Maximum number of physical registers of all kinds of all supported
-  //! architectures. This is only important for \ref CodeCompiler and its
-  //! \ref RAPass (register allocator pass).
-  //!
-  //! NOTE: The distribution of these registers is architecture specific.
-  kMaxPhysRegs = 64,
+  //! Maximum number of physical registers AsmJit can use, per group.
+  kMaxPhysRegs = 32,
 
   //! Maximum alignment.
   kMaxAlignment = 64,
@@ -83,8 +72,6 @@ typedef uint32_t Error;
 //! AsmJit error codes.
 ASMJIT_ENUM(ErrorCode) {
   //! No error (success).
-  //!
-  //! This is default state and state you want.
   kErrorOk = 0,
 
   //! Heap memory allocation failed.
@@ -152,8 +139,8 @@ ASMJIT_ENUM(ErrorCode) {
   kErrorInvalidInstruction,
   //! Invalid register type.
   kErrorInvalidRegType,
-  //! Invalid register kind.
-  kErrorInvalidRegKind,
+  //! Invalid register group.
+  kErrorInvalidRegGroup,
   //! Invalid register's physical id.
   kErrorInvalidPhysId,
   //! Invalid register's virtual id.
@@ -164,7 +151,7 @@ ASMJIT_ENUM(ErrorCode) {
   kErrorInvalidLockPrefix,
   //! Invalid XACQUIRE prefix.
   kErrorInvalidXAcquirePrefix,
-  //! Invalid XACQUIRE prefix.
+  //! Invalid XRELEASE prefix.
   kErrorInvalidXReleasePrefix,
   //! Invalid REP prefix.
   kErrorInvalidRepPrefix,
@@ -203,6 +190,11 @@ ASMJIT_ENUM(ErrorCode) {
   //! Mismatching operand size (size of multiple operands doesn't match the operation size).
   kErrorOperandSizeMismatch,
 
+  //! Invalid option.
+  kErrorInvalidOption,
+  //! Option already defined.
+  kErrorOptionAlreadyDefined,
+
   //! Invalid TypeId.
   kErrorInvalidTypeId,
   //! Invalid use of a 8-bit GPB-HIGH register.
@@ -226,10 +218,10 @@ ASMJIT_ENUM(ErrorCode) {
 };
 
 // ============================================================================
-// [asmjit::Internal]
+// [asmjit::AsmJitInternal]
 // ============================================================================
 
-namespace Internal {
+namespace AsmJitInternal {
 
 #if defined(ASMJIT_CUSTOM_ALLOC)   && \
     defined(ASMJIT_CUSTOM_REALLOC) && \
@@ -251,13 +243,13 @@ static ASMJIT_INLINE void releaseMemory(void* p) noexcept { ::free(p); }
 template<typename Dst, typename Src>
 static ASMJIT_INLINE Dst ptr_cast(Src p) noexcept { return (Dst)p; }
 
-} // Internal namespace
+} // AsmJitInternal namespace
 
 template<typename Func>
-static ASMJIT_INLINE Func ptr_as_func(void* func) noexcept { return Internal::ptr_cast<Func, void*>(func); }
+static ASMJIT_INLINE Func ptr_as_func(void* func) noexcept { return AsmJitInternal::ptr_cast<Func, void*>(func); }
 
 template<typename Func>
-static ASMJIT_INLINE void* func_as_ptr(Func func) noexcept { return Internal::ptr_cast<void*, Func>(func); }
+static ASMJIT_INLINE void* func_as_ptr(Func func) noexcept { return AsmJitInternal::ptr_cast<void*, Func>(func); }
 
 // ============================================================================
 // [asmjit::DebugUtils]
@@ -304,7 +296,7 @@ ASMJIT_API void ASMJIT_NORETURN assertionFailed(const char* file, int line, cons
 #else
 # define ASMJIT_ASSERT(exp) ASMJIT_NOP
 # define ASMJIT_NOT_REACHED() ASMJIT_ASSUME(0)
-#endif // DEBUG
+#endif
 
 //! \internal
 //!
@@ -328,7 +320,7 @@ static const _Init Init = {};
 
 struct _NoInit {};
 static const _NoInit NoInit = {};
-#endif // !ASMJIT_DOCGEN
+#endif
 
 //! \}
 

@@ -274,11 +274,11 @@ class GenUtils {
       const name = inst.name;
       const operands = inst.operands;
 
-      if (inst.attributes.LOCK    ) f.Lock     = true;
+      if (inst.attributes.Lock    ) f.Lock     = true;
       if (inst.attributes.REP     ) f.Rep      = true;
       if (inst.attributes.REPNZ   ) f.Repnz    = true;
-      if (inst.attributes.XACQUIRE) f.XAcquire = true;
-      if (inst.attributes.XRELEASE) f.XRelease = true;
+      if (inst.attributes.XAcquire) f.XAcquire = true;
+      if (inst.attributes.XRelease) f.XRelease = true;
 
       if (inst.fpu) {
         for (var j = 0; j < operands.length; j++) {
@@ -334,30 +334,20 @@ class GenUtils {
       const name = inst.name;
 
       const operands = inst.operands;
+      const operations = inst.operations;
 
       // Special case: MOV undefines flags if moving between GP and CR|DR registers.
-      if (name === "mov")
-        f.MovCrDr = true;
+      if (name === "mov") f.MovCrDr = true;
 
       // Special case: MOVSS|MOVSD zeroes the remaining part of destination if source operand is memory.
-      if ((name === "movss" || name === "movsd") && !inst.attributes.REP)
-        f.MovSsSd = true;
+      if ((name === "movss" || name === "movsd") && !inst.attributes.REP) f.MovSsSd = true;
 
-      // Hardware prefetch.
-      if (name.startsWith("prefetch"))
-        f.Prefetch = true;
+      if (operations.Scalar) f.Scalar = true;
+      if (operations.Barrier) f.Barrier = true;
+      if (operations.Prefetch) f.Prefetch = true;
 
-      // Memory barrier.
-      if (/^[lms]fence$/.test(name))
-        f.Barrier = true;
-
-      // Instruction is volatile.
-      if (inst.attributes.VOLATILE)
-        f.Volatile = true;
-
-      // Instruction is privileged.
-      if (inst.privilege !== "L3")
-        f.Privileged = true;
+      if (inst.attributes.Volatile) f.Volatile = true;
+      if (inst.privilege !== "L3") f.Privileged = true;
     }
 
     return Object.getOwnPropertyNames(f);
@@ -1353,9 +1343,9 @@ class X86Generator extends base.BaseGenerator {
       inst.operationDataIndex = table.addIndexed(`{ ${opFlagsStr}, { ${featuresStr} }, ${rStr}, ${wStr} }`);
     }
 
-    var s = `#define OP_FLAG(F) X86Inst::kOperation##F\n` +
-            `#define FEATURE(F) CpuInfo::kX86Feature##F\n` +
-            `#define SPECIAL(F) x86::kSpecialReg_##F\n` +
+    var s = `#define OP_FLAG(F) uint32_t(X86Inst::kOperation##F)\n` +
+            `#define FEATURE(F) uint32_t(CpuInfo::kX86Feature##F)\n` +
+            `#define SPECIAL(F) uint32_t(x86::kSpecialReg_##F)\n` +
             `const X86Inst::OperationData X86InstDB::operationData[] = {\n${StringUtils.format(table, kIndent, true)}\n};\n` +
             `#undef SPECIAL\n` +
             `#undef FEATURE\n` +

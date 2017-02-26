@@ -199,7 +199,7 @@ public:
 //! Register traits contains information about a particular register type. It's
 //! used by asmjit to setup register information on-the-fly and to populate
 //! tables that contain register information (this way it's possible to change
-//! register types and kinds without having to reorder these tables).
+//! register types and groups without having to reorder these tables).
 template<uint32_t RegType>
 struct X86RegTraits {
   enum {
@@ -208,7 +208,7 @@ struct X86RegTraits {
     kTypeId    = TypeId::kVoid,          //!< Everything is void by default.
 
     kType      = 0,                      //!< Zero type by default.
-    kKind      = 0,                      //!< Zero kind by default.
+    kGroup     = 0,                      //!< Zero group by default.
     kSize      = 0,                      //!< No size by default.
     kSignature = 0                       //!< No signature by default.
   };
@@ -242,21 +242,21 @@ public:
     kRegCount                            //!< Count of register types.
   };
 
-  //! Register kind.
-  ASMJIT_ENUM(Kind) {
-    kKindGp       = Reg::kKindGp,        //!< GP register kind or none (universal).
-    kKindVec      = Reg::kKindVec,       //!< XMM|YMM|ZMM register kind (universal).
-    kKindMm       = 2,                   //!< MMX register kind (legacy).
-    kKindK        = 3,                   //!< K register kind.
+  //! Register group.
+  ASMJIT_ENUM(Group) {
+    kGroupGp      = Reg::kGroupGp,       //!< GP register group or none (universal).
+    kGroupVec     = Reg::kGroupVec,      //!< XMM|YMM|ZMM register group (universal).
+    kGroupMm      = 2,                   //!< MMX register group (legacy).
+    kGroupK       = 3,                   //!< K register group.
 
     // These are not managed by CodeCompiler nor used by Func-API:
-    kKindFp       = 4,                   //!< FPU (x87) register kind.
-    kKindCr       = 5,                   //!< Control register kind.
-    kKindDr       = 6,                   //!< Debug register kind.
-    kKindBnd      = 7,                   //!< Bound register kind.
-    kKindSeg      = 8,                   //!< Segment register kind.
-    kKindRip      = 9,                   //!< Instrucion pointer (IP).
-    kKindCount                           //!< Count of all register kinds.
+    kGroupFp      = 4,                   //!< FPU (x87) register group.
+    kGroupCr      = 5,                   //!< Control register group.
+    kGroupDr      = 6,                   //!< Debug register group.
+    kGroupBnd     = 7,                   //!< Bound register group.
+    kGroupSeg     = 8,                   //!< Segment register group.
+    kGroupRip     = 9,                   //!< Instrucion pointer (IP).
+    kGroupCount                          //!< Count of all register groups.
   };
 
   ASMJIT_DEFINE_ABSTRACT_REG(X86Reg, Reg)
@@ -308,9 +308,9 @@ public:
     setId(rId);
   }
 
-  static ASMJIT_INLINE uint32_t kindOf(uint32_t rType) noexcept;
+  static ASMJIT_INLINE uint32_t groupOf(uint32_t type) noexcept;
   template<uint32_t Type>
-  static ASMJIT_INLINE uint32_t kindOfT() noexcept { return X86RegTraits<Type>::kKind; }
+  static ASMJIT_INLINE uint32_t groupOfT() noexcept { return X86RegTraits<Type>::kGroup; }
 
   static ASMJIT_INLINE uint32_t signatureOf(uint32_t rType) noexcept;
   template<uint32_t Type>
@@ -328,7 +328,7 @@ public:
 
   //! Get if the `op` operand is either a low or high 8-bit GPB register.
   static ASMJIT_INLINE bool isGpb(const Operand_& op) noexcept {
-    // Check operand type, register kind, and size. Not interested in register type.
+    // Check operand type, register group, and size. Not interested in register type.
     const uint32_t kSgn = (Operand::kOpReg << kSignatureOpShift  ) |
                           (1               << kSignatureSizeShift) ;
     return (op.getSignature() & (kSignatureOpMask | kSignatureSizeMask)) == kSgn;
@@ -369,118 +369,24 @@ public:
   static ASMJIT_INLINE bool isBnd(const Operand_& op, uint32_t rId) noexcept { return isBnd(op) & (op.getId() == rId); }
   static ASMJIT_INLINE bool isCr(const Operand_& op, uint32_t rId) noexcept { return isCr(op) & (op.getId() == rId); }
   static ASMJIT_INLINE bool isDr(const Operand_& op, uint32_t rId) noexcept { return isDr(op) & (op.getId() == rId); }
-
-  // --------------------------------------------------------------------------
-  // [Memory Cast]
-  // --------------------------------------------------------------------------
-
-  // DEPRECATED in next-wip.
-  ASMJIT_INLINE X86Mem m(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, getSize(), Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, getSize(), Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 8-bit memory operand.
-  ASMJIT_INLINE X86Mem m8(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 1, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m8(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 1, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 16-bit memory operand.
-  ASMJIT_INLINE X86Mem m16(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 2, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m16(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 2, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 32-bit memory operand.
-  ASMJIT_INLINE X86Mem m32(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 4, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m32(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 4, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 64-bit memory operand.
-  ASMJIT_INLINE X86Mem m64(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 8, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m64(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 8, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 80-bit memory operand (long double).
-  ASMJIT_INLINE X86Mem m80(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 10, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m80(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 10, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 128-bit memory operand.
-  ASMJIT_INLINE X86Mem m128(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 16, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m128(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 16, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 256-bit memory operand.
-  ASMJIT_INLINE X86Mem m256(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 32, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m256(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 32, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! Cast this variable to 256-bit memory operand.
-  ASMJIT_INLINE X86Mem m512(int32_t disp = 0) const noexcept {
-    return X86Mem(*this, disp, 64, Mem::kSignatureMemRegHomeFlag);
-  }
-
-  //! \overload
-  ASMJIT_INLINE X86Mem m512(const X86Reg& index, uint32_t shift = 0, int32_t disp = 0) const noexcept {
-    return X86Mem(*this, index, shift, disp, 64, Mem::kSignatureMemRegHomeFlag);
-  };
 };
 
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpbLo, X86Reg::kKindGp , 1 , 16, TypeId::kI8    );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpbHi, X86Reg::kKindGp , 1 , 4 , TypeId::kI8    );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpw  , X86Reg::kKindGp , 2 , 16, TypeId::kI16   );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpd  , X86Reg::kKindGp , 4 , 16, TypeId::kI32   );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpq  , X86Reg::kKindGp , 8 , 16, TypeId::kI64   );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Xmm , X86Reg::kRegXmm  , X86Reg::kKindVec, 16, 32, TypeId::kI32x4 );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Ymm , X86Reg::kRegYmm  , X86Reg::kKindVec, 32, 32, TypeId::kI32x8 );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Zmm , X86Reg::kRegZmm  , X86Reg::kKindVec, 64, 32, TypeId::kI32x16);
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Rip , X86Reg::kRegRip  , X86Reg::kKindRip, 0 , 1 , TypeId::kVoid  );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Seg , X86Reg::kRegSeg  , X86Reg::kKindSeg, 2 , 7 , TypeId::kVoid  );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Fp  , X86Reg::kRegFp   , X86Reg::kKindFp , 10, 8 , TypeId::kF80   );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Mm  , X86Reg::kRegMm   , X86Reg::kKindMm , 8 , 8 , TypeId::kMmx64 );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86KReg, X86Reg::kRegK    , X86Reg::kKindK  , 0 , 8 , TypeId::kVoid  );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Bnd , X86Reg::kRegBnd  , X86Reg::kKindBnd, 16, 4 , TypeId::kVoid  );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86CReg, X86Reg::kRegCr   , X86Reg::kKindCr , 0 , 16, TypeId::kVoid  );
-ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86DReg, X86Reg::kRegDr   , X86Reg::kKindDr , 0 , 16, TypeId::kVoid  );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpbLo, X86Reg::kGroupGp , 1 , 16, TypeId::kI8    );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpbHi, X86Reg::kGroupGp , 1 , 4 , TypeId::kI8    );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpw  , X86Reg::kGroupGp , 2 , 16, TypeId::kI16   );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpd  , X86Reg::kGroupGp , 4 , 16, TypeId::kI32   );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Gp  , X86Reg::kRegGpq  , X86Reg::kGroupGp , 8 , 16, TypeId::kI64   );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Xmm , X86Reg::kRegXmm  , X86Reg::kGroupVec, 16, 32, TypeId::kI32x4 );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Ymm , X86Reg::kRegYmm  , X86Reg::kGroupVec, 32, 32, TypeId::kI32x8 );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Zmm , X86Reg::kRegZmm  , X86Reg::kGroupVec, 64, 32, TypeId::kI32x16);
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Rip , X86Reg::kRegRip  , X86Reg::kGroupRip, 0 , 1 , TypeId::kVoid  );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Seg , X86Reg::kRegSeg  , X86Reg::kGroupSeg, 2 , 7 , TypeId::kVoid  );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Fp  , X86Reg::kRegFp   , X86Reg::kGroupFp , 10, 8 , TypeId::kF80   );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Mm  , X86Reg::kRegMm   , X86Reg::kGroupMm , 8 , 8 , TypeId::kMmx64 );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86KReg, X86Reg::kRegK    , X86Reg::kGroupK  , 0 , 8 , TypeId::kVoid  );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86Bnd , X86Reg::kRegBnd  , X86Reg::kGroupBnd, 16, 4 , TypeId::kVoid  );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86CReg, X86Reg::kRegCr   , X86Reg::kGroupCr , 0 , 16, TypeId::kVoid  );
+ASMJIT_DEFINE_REG_TRAITS(X86RegTraits, X86DReg, X86Reg::kRegDr   , X86Reg::kGroupDr , 0 , 16, TypeId::kVoid  );
 
 //! General purpose register (X86/X64).
 class X86Gp : public X86Reg {
@@ -641,6 +547,7 @@ struct X86OpData {
 #else
 # define ASMJIT_X86_REG_DATA(REG) REG
 #endif
+
   ASMJIT_X86_REG_DATA(X86Rip ) rip[1];
   ASMJIT_X86_REG_DATA(X86Seg ) seg[7];
   ASMJIT_X86_REG_DATA(X86Gp  ) gpbLo[16];
@@ -657,6 +564,7 @@ struct X86OpData {
   ASMJIT_X86_REG_DATA(X86Bnd ) bnd[4];
   ASMJIT_X86_REG_DATA(X86CReg) cr[16];
   ASMJIT_X86_REG_DATA(X86DReg) dr[16];
+
 #undef ASMJIT_X86_REG_DATA
 };
 ASMJIT_VARAPI const X86OpData x86OpData;
@@ -667,9 +575,9 @@ ASMJIT_INLINE uint32_t X86Reg::signatureOf(uint32_t rType) noexcept {
   return x86OpData.archRegs.regInfo[rType].getSignature();
 }
 
-ASMJIT_INLINE uint32_t X86Reg::kindOf(uint32_t rType) noexcept {
+ASMJIT_INLINE uint32_t X86Reg::groupOf(uint32_t rType) noexcept {
   ASMJIT_ASSERT(rType <= Reg::kRegMax);
-  return x86OpData.archRegs.regInfo[rType].getKind();
+  return x86OpData.archRegs.regInfo[rType].getGroup();
 }
 
 // ============================================================================
@@ -935,7 +843,7 @@ ASMJIT_X86_PHYS_REG(X86DReg, dr15 , dr[15]);    //!< 32-bit or 64-bit debug regi
 
 #undef ASMJIT_X86_PHYS_REG
 } // anonymous namespace
-#endif // !ASMJIT_EXPORTS_X86_OPERAND
+#endif
 
 //! Create an 8-bit low GPB register operand.
 static ASMJIT_INLINE X86GpbLo gpb(uint32_t rId) noexcept { return X86GpbLo(rId); }

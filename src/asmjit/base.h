@@ -20,6 +20,7 @@
 #include "./base/func.h"
 #include "./base/globals.h"
 #include "./base/inst.h"
+#include "./base/intutils.h"
 #include "./base/logging.h"
 #include "./base/operand.h"
 #include "./base/osutils.h"
@@ -27,7 +28,7 @@
 #include "./base/simdtypes.h"
 #include "./base/string.h"
 #include "./base/utils.h"
-#include "./base/vmem.h"
+#include "./base/virtmem.h"
 #include "./base/zone.h"
 
 // [Guard]

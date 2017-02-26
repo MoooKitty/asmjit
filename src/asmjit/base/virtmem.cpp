@@ -8,9 +8,9 @@
 #define ASMJIT_EXPORTS
 
 // [Dependencies]
+#include "../base/intutils.h"
 #include "../base/osutils.h"
-#include "../base/utils.h"
-#include "../base/vmem.h"
+#include "../base/virtmem.h"
 
 // [Api-Begin]
 #include "../asmjit_apibegin.h"
@@ -55,7 +55,7 @@
 namespace asmjit {
 
 // ============================================================================
-// [asmjit::VMemMgr - BitOps]
+// [asmjit::VirtMem - BitOps]
 // ============================================================================
 
 #define M_DIV(x, y) ((x) / (y))
@@ -95,47 +95,42 @@ static void _SetBits(size_t* buf, size_t index, size_t len) noexcept {
 }
 
 // ============================================================================
-// [asmjit::VMemMgr::TypeDefs]
+// [asmjit::VirtMem::TypeDefs]
 // ============================================================================
 
-typedef VMemMgr::RbNode RbNode;
-typedef VMemMgr::MemNode MemNode;
-typedef VMemMgr::PermanentNode PermanentNode;
+typedef VirtMem::RBNode RBNode;
+typedef VirtMem::MemNode MemNode;
+typedef VirtMem::PermanentNode PermanentNode;
 
 // ============================================================================
-// [asmjit::VMemMgr::RbNode]
+// [asmjit::VirtMem::RBNode]
 // ============================================================================
 
 //! \internal
 //!
 //! Base red-black tree node.
-struct VMemMgr::RbNode {
+struct VirtMem::RBNode {
   // Implementation is based on article by Julienne Walker (Public Domain),
   // including C code and original comments. Thanks for the excellent article.
+  //! Get if the node is red (nullptr or node with red flag).
+  static ASMJIT_INLINE bool isRed(RBNode* node) noexcept { return node && node->red; }
 
-  RbNode* node[2];                       //!< Left[0] and right[1] nodes.
+  RBNode* node[2];                       //!< Left[0] and right[1] nodes.
   uint8_t* mem;                          //!< Virtual memory address.
   uint32_t red;                          //!< Node color (red vs. black).
 };
 
 //! \internal
 //!
-//! Get if the node is red (nullptr or node with red flag).
-static ASMJIT_INLINE bool rbIsRed(RbNode* node) noexcept {
-  return node && node->red;
-}
-
-//! \internal
-//!
 //! Check whether the RB tree is valid.
-static int rbAssert(RbNode* root) noexcept {
+static int rbAssert(RBNode* root) noexcept {
   if (!root) return 1;
 
-  RbNode* ln = root->node[0];
-  RbNode* rn = root->node[1];
+  RBNode* ln = root->node[0];
+  RBNode* rn = root->node[1];
 
   // Red violation.
-  ASMJIT_ASSERT(!(rbIsRed(root) && (rbIsRed(ln) || rbIsRed(rn))));
+  ASMJIT_ASSERT(!(RBNode::isRed(root) && (RBNode::isRed(ln) || RBNode::isRed(rn))));
 
   int lh = rbAssert(ln);
   int rh = rbAssert(rn);
@@ -149,7 +144,7 @@ static int rbAssert(RbNode* root) noexcept {
 
   // Only count black links.
   if (lh != 0 && rh != 0)
-    return rbIsRed(root) ? lh : lh + 1;
+    return RBNode::isRed(root) ? lh : lh + 1;
   else
     return 0;
 }
@@ -157,8 +152,8 @@ static int rbAssert(RbNode* root) noexcept {
 //! \internal
 //!
 //! Single rotation.
-static ASMJIT_INLINE RbNode* rbRotateSingle(RbNode* root, int dir) noexcept {
-  RbNode* save = root->node[!dir];
+static ASMJIT_INLINE RBNode* rbRotateSingle(RBNode* root, int dir) noexcept {
+  RBNode* save = root->node[!dir];
 
   root->node[!dir] = save->node[dir];
   save->node[dir] = root;
@@ -172,16 +167,16 @@ static ASMJIT_INLINE RbNode* rbRotateSingle(RbNode* root, int dir) noexcept {
 //! \internal
 //!
 //! Double rotation.
-static ASMJIT_INLINE RbNode* rbRotateDouble(RbNode* root, int dir) noexcept {
+static ASMJIT_INLINE RBNode* rbRotateDouble(RBNode* root, int dir) noexcept {
   root->node[!dir] = rbRotateSingle(root->node[!dir], !dir);
   return rbRotateSingle(root, dir);
 }
 
 // ============================================================================
-// [asmjit::VMemMgr::MemNode]
+// [asmjit::VirtMem::MemNode]
 // ============================================================================
 
-struct VMemMgr::MemNode : public RbNode {
+struct VirtMem::MemNode : public RBNode {
   ASMJIT_INLINE void init(MemNode* other) noexcept {
     mem = other->mem;
 
@@ -212,13 +207,13 @@ struct VMemMgr::MemNode : public RbNode {
 };
 
 // ============================================================================
-// [asmjit::VMemMgr::PermanentNode]
+// [asmjit::VirtMem::PermanentNode]
 // ============================================================================
 
 //! \internal
 //!
 //! Permanent node.
-struct VMemMgr::PermanentNode {
+struct VirtMem::PermanentNode {
   //! Get available space.
   ASMJIT_INLINE size_t getAvailable() const noexcept { return size - used; }
 
@@ -229,15 +224,17 @@ struct VMemMgr::PermanentNode {
 };
 
 // ============================================================================
-// [asmjit::VMemMgr - Private]
+// [asmjit::VirtMem - Private]
 // ============================================================================
 
 //! \internal
 //!
 //! Helper to avoid `#ifdef`s in the code.
-ASMJIT_INLINE uint8_t* vMemMgrAllocVMem(VMemMgr* self, size_t size, size_t* vSize) noexcept {
+ASMJIT_INLINE uint8_t* vMemMgrAllocVMem(VirtMem* self, size_t size, size_t* vSize) noexcept {
   uint32_t flags = OSUtils::kVMWritable | OSUtils::kVMExecutable;
+
 #if !ASMJIT_OS_WINDOWS
+  ASMJIT_UNUSED(self);
   return static_cast<uint8_t*>(OSUtils::allocVirtualMemory(size, vSize, flags));
 #else
   return static_cast<uint8_t*>(OSUtils::allocProcessMemory(self->_hProcess, size, vSize, flags));
@@ -247,8 +244,9 @@ ASMJIT_INLINE uint8_t* vMemMgrAllocVMem(VMemMgr* self, size_t size, size_t* vSiz
 //! \internal
 //!
 //! Helper to avoid `#ifdef`s in the code.
-ASMJIT_INLINE Error vMemMgrReleaseVMem(VMemMgr* self, void* p, size_t vSize) noexcept {
+ASMJIT_INLINE Error vMemMgrReleaseVMem(VirtMem* self, void* p, size_t vSize) noexcept {
 #if !ASMJIT_OS_WINDOWS
+  ASMJIT_UNUSED(self);
   return OSUtils::releaseVirtualMemory(p, vSize);
 #else
   return OSUtils::releaseProcessMemory(self->_hProcess, p, vSize);
@@ -258,7 +256,7 @@ ASMJIT_INLINE Error vMemMgrReleaseVMem(VMemMgr* self, void* p, size_t vSize) noe
 //! \internal
 //!
 //! Check whether the Red-Black tree is valid.
-static bool vMemMgrCheckTree(VMemMgr* self) noexcept {
+static bool vMemMgrCheckTree(VirtMem* self) noexcept {
   return rbAssert(self->_root) > 0;
 }
 
@@ -267,7 +265,7 @@ static bool vMemMgrCheckTree(VMemMgr* self) noexcept {
 //! Alloc virtual memory including a heap memory needed for `MemNode` data.
 //!
 //! Returns set-up `MemNode*` or nullptr if allocation failed.
-static MemNode* vMemMgrCreateNode(VMemMgr* self, size_t size, size_t density) noexcept {
+static MemNode* vMemMgrCreateNode(VirtMem* self, size_t size, size_t density) noexcept {
   size_t vSize;
   uint8_t* vmem = vMemMgrAllocVMem(self, size, &vSize);
   if (!vmem) return nullptr;
@@ -275,18 +273,18 @@ static MemNode* vMemMgrCreateNode(VMemMgr* self, size_t size, size_t density) no
   size_t blocks = (vSize / density);
   size_t bsize = (((blocks + 7) >> 3) + sizeof(size_t) - 1) & ~(size_t)(sizeof(size_t) - 1);
 
-  MemNode* node = static_cast<MemNode*>(Internal::allocMemory(sizeof(MemNode)));
-  uint8_t* data = static_cast<uint8_t*>(Internal::allocMemory(bsize * 2));
+  MemNode* node = static_cast<MemNode*>(AsmJitInternal::allocMemory(sizeof(MemNode)));
+  uint8_t* data = static_cast<uint8_t*>(AsmJitInternal::allocMemory(bsize * 2));
 
   // Out of memory.
   if (!node || !data) {
     vMemMgrReleaseVMem(self, vmem, vSize);
-    if (node) Internal::releaseMemory(node);
-    if (data) Internal::releaseMemory(data);
+    if (node) AsmJitInternal::releaseMemory(node);
+    if (data) AsmJitInternal::releaseMemory(data);
     return nullptr;
   }
 
-  // Initialize RbNode data.
+  // Initialize RBNode data.
   node->node[0] = nullptr;
   node->node[1] = nullptr;
   node->mem = vmem;
@@ -309,22 +307,22 @@ static MemNode* vMemMgrCreateNode(VMemMgr* self, size_t size, size_t density) no
   return node;
 }
 
-static void vMemMgrInsertNode(VMemMgr* self, MemNode* node) noexcept {
+static void vMemMgrInsertNode(VirtMem* self, MemNode* node) noexcept {
   if (!self->_root) {
     // Empty tree case.
     self->_root = node;
   }
   else {
     // False tree root.
-    RbNode head = { { nullptr, nullptr }, 0, 0 };
+    RBNode head = { { nullptr, nullptr }, 0, 0 };
 
     // Grandparent & parent.
-    RbNode* g = nullptr;
-    RbNode* t = &head;
+    RBNode* g = nullptr;
+    RBNode* t = &head;
 
     // Iterator & parent.
-    RbNode* p = nullptr;
-    RbNode* q = t->node[1] = self->_root;
+    RBNode* p = nullptr;
+    RBNode* q = t->node[1] = self->_root;
 
     int dir = 0;
     int last = 0; // Not needed to initialize, but makes some tools happy.
@@ -336,7 +334,7 @@ static void vMemMgrInsertNode(VMemMgr* self, MemNode* node) noexcept {
         q = node;
         p->node[dir] = node;
       }
-      else if (rbIsRed(q->node[0]) && rbIsRed(q->node[1])) {
+      else if (RBNode::isRed(q->node[0]) && RBNode::isRed(q->node[1])) {
         // Color flip.
         q->red = 1;
         q->node[0]->red = 0;
@@ -344,7 +342,7 @@ static void vMemMgrInsertNode(VMemMgr* self, MemNode* node) noexcept {
       }
 
       // Fix red violation.
-      if (rbIsRed(q) && rbIsRed(p)) {
+      if (RBNode::isRed(q) && RBNode::isRed(p)) {
         int dir2 = t->node[1] == g;
         t->node[dir2] = q == p->node[last] ? rbRotateSingle(g, !last) : rbRotateDouble(g, !last);
       }
@@ -392,17 +390,17 @@ static void vMemMgrInsertNode(VMemMgr* self, MemNode* node) noexcept {
 //!
 //! Returns node that should be freed, but it doesn't have to be necessarily
 //! the `node` passed.
-static MemNode* vMemMgrRemoveNode(VMemMgr* self, MemNode* node) noexcept {
+static MemNode* vMemMgrRemoveNode(VirtMem* self, MemNode* node) noexcept {
   // False tree root.
-  RbNode head = { { nullptr, nullptr }, 0, 0 };
+  RBNode head = { { nullptr, nullptr }, 0, 0 };
 
   // Helpers.
-  RbNode* q = &head;
-  RbNode* p = nullptr;
-  RbNode* g = nullptr;
+  RBNode* q = &head;
+  RBNode* p = nullptr;
+  RBNode* g = nullptr;
 
   // Found item.
-  RbNode* f = nullptr;
+  RBNode* f = nullptr;
   int dir = 1;
 
   // Set up.
@@ -423,15 +421,15 @@ static MemNode* vMemMgrRemoveNode(VMemMgr* self, MemNode* node) noexcept {
       f = q;
 
     // Push the red node down.
-    if (!rbIsRed(q) && !rbIsRed(q->node[dir])) {
-      if (rbIsRed(q->node[!dir])) {
+    if (!RBNode::isRed(q) && !RBNode::isRed(q->node[dir])) {
+      if (RBNode::isRed(q->node[!dir])) {
         p = p->node[last] = rbRotateSingle(q, dir);
       }
-      else if (!rbIsRed(q->node[!dir])) {
-        RbNode* s = p->node[!last];
+      else if (!RBNode::isRed(q->node[!dir])) {
+        RBNode* s = p->node[!last];
 
         if (s) {
-          if (!rbIsRed(s->node[!last]) && !rbIsRed(s->node[last])) {
+          if (!RBNode::isRed(s->node[!last]) && !RBNode::isRed(s->node[last])) {
             // Color flip.
             p->red = 0;
             s->red = 1;
@@ -440,9 +438,9 @@ static MemNode* vMemMgrRemoveNode(VMemMgr* self, MemNode* node) noexcept {
           else {
             int dir2 = g->node[1] == p;
 
-            if (rbIsRed(s->node[last]))
+            if (RBNode::isRed(s->node[last]))
               g->node[dir2] = rbRotateDouble(p, last);
-            else if (rbIsRed(s->node[!last]))
+            else if (RBNode::isRed(s->node[!last]))
               g->node[dir2] = rbRotateSingle(p, last);
 
             // Ensure correct coloring.
@@ -491,7 +489,7 @@ static MemNode* vMemMgrRemoveNode(VMemMgr* self, MemNode* node) noexcept {
   return static_cast<MemNode*>(q);
 }
 
-static MemNode* vMemMgrFindNodeByPtr(VMemMgr* self, uint8_t* mem) noexcept {
+static MemNode* vMemMgrFindNodeByPtr(VirtMem* self, uint8_t* mem) noexcept {
   MemNode* node = self->_root;
   while (node) {
     uint8_t* nodeMem = node->mem;
@@ -515,11 +513,11 @@ static MemNode* vMemMgrFindNodeByPtr(VMemMgr* self, uint8_t* mem) noexcept {
   return node;
 }
 
-static void* vMemMgrAllocPermanent(VMemMgr* self, size_t vSize) noexcept {
+static void* vMemMgrAllocPermanent(VirtMem* self, size_t vSize) noexcept {
   static const size_t permanentAlignment = 32;
   static const size_t permanentNodeSize  = 32768;
 
-  vSize = Utils::alignTo<size_t>(vSize, permanentAlignment);
+  vSize = IntUtils::alignTo<size_t>(vSize, permanentAlignment);
 
   AutoLock locked(self->_lock);
   PermanentNode* node = self->_permanent;
@@ -533,12 +531,12 @@ static void* vMemMgrAllocPermanent(VMemMgr* self, size_t vSize) noexcept {
     size_t nodeSize = permanentNodeSize;
     if (nodeSize < vSize) nodeSize = vSize;
 
-    node = static_cast<PermanentNode*>(Internal::allocMemory(sizeof(PermanentNode)));
+    node = static_cast<PermanentNode*>(AsmJitInternal::allocMemory(sizeof(PermanentNode)));
     if (!node) return nullptr;
 
     node->mem = vMemMgrAllocVMem(self, nodeSize, &node->size);
     if (!node->mem) {
-      Internal::releaseMemory(node);
+      AsmJitInternal::releaseMemory(node);
       return nullptr;
     }
 
@@ -558,7 +556,7 @@ static void* vMemMgrAllocPermanent(VMemMgr* self, size_t vSize) noexcept {
   return static_cast<void*>(result);
 }
 
-static void* vMemMgrAllocFreeable(VMemMgr* self, size_t vSize) noexcept {
+static void* vMemMgrAllocFreeable(VirtMem* self, size_t vSize) noexcept {
   // Current index.
   size_t i;
 
@@ -567,7 +565,7 @@ static void* vMemMgrAllocFreeable(VMemMgr* self, size_t vSize) noexcept {
   size_t minVSize;
 
   // Align to 32 bytes by default.
-  vSize = Utils::alignTo<size_t>(vSize, 32);
+  vSize = IntUtils::alignTo<size_t>(vSize, 32);
   if (vSize == 0)
     return nullptr;
 
@@ -685,10 +683,10 @@ L_Found:
 
 //! \internal
 //!
-//! Reset the whole `VMemMgr` instance, freeing all heap memory allocated an
+//! Reset the whole `VirtMem` instance, freeing all heap memory allocated an
 //! virtual memory allocated unless `keepVirtualMemory` is true (and this is
 //! only used when writing data to a remote process).
-static void vMemMgrReset(VMemMgr* self, bool keepVirtualMemory) noexcept {
+static void vMemMgrReset(VirtMem* self, bool keepVirtualMemory) noexcept {
   MemNode* node = self->_first;
 
   while (node) {
@@ -697,8 +695,8 @@ static void vMemMgrReset(VMemMgr* self, bool keepVirtualMemory) noexcept {
     if (!keepVirtualMemory)
       vMemMgrReleaseVMem(self, node->mem, node->size);
 
-    Internal::releaseMemory(node->baUsed);
-    Internal::releaseMemory(node);
+    AsmJitInternal::releaseMemory(node->baUsed);
+    AsmJitInternal::releaseMemory(node);
 
     node = next;
   }
@@ -713,20 +711,20 @@ static void vMemMgrReset(VMemMgr* self, bool keepVirtualMemory) noexcept {
 }
 
 // ============================================================================
-// [asmjit::VMemMgr - Construction / Destruction]
+// [asmjit::VirtMem - Construction / Destruction]
 // ============================================================================
 
 #if !ASMJIT_OS_WINDOWS
-VMemMgr::VMemMgr() noexcept {
+VirtMem::VirtMem() noexcept
 #else
-VMemMgr::VMemMgr(HANDLE hProcess) noexcept {
+VirtMem::VirtMem(HANDLE hProcess) noexcept
 #endif
-
+{
   VMemInfo vm = OSUtils::getVirtualMemoryInfo();
 
 #if ASMJIT_OS_WINDOWS
   _hProcess = hProcess ? hProcess : vm.hCurrentProcess;
-#endif // ASMJIT_OS_WINDOWS
+#endif
 
   _blockSize = vm.pageGranularity;
   _blockDensity = 64;
@@ -743,7 +741,7 @@ VMemMgr::VMemMgr(HANDLE hProcess) noexcept {
   _keepVirtualMemory = false;
 }
 
-VMemMgr::~VMemMgr() noexcept {
+VirtMem::~VirtMem() noexcept {
   // Freeable memory cleanup - Also frees the virtual memory if configured to.
   vMemMgrReset(this, _keepVirtualMemory);
 
@@ -751,31 +749,31 @@ VMemMgr::~VMemMgr() noexcept {
   PermanentNode* node = _permanent;
   while (node) {
     PermanentNode* prev = node->prev;
-    Internal::releaseMemory(node);
+    AsmJitInternal::releaseMemory(node);
     node = prev;
   }
 }
 
 // ============================================================================
-// [asmjit::VMemMgr - Reset]
+// [asmjit::VirtMem - Reset]
 // ============================================================================
 
-void VMemMgr::reset() noexcept {
+void VirtMem::reset() noexcept {
   vMemMgrReset(this, false);
 }
 
 // ============================================================================
-// [asmjit::VMemMgr - Alloc / Release]
+// [asmjit::VirtMem - Alloc / Release]
 // ============================================================================
 
-void* VMemMgr::alloc(size_t size, uint32_t type) noexcept {
+void* VirtMem::alloc(size_t size, uint32_t type) noexcept {
   if (type == kAllocPermanent)
     return vMemMgrAllocPermanent(this, size);
   else
     return vMemMgrAllocFreeable(this, size);
 }
 
-Error VMemMgr::release(void* p) noexcept {
+Error VirtMem::release(void* p) noexcept {
   if (!p) return kErrorOk;
 
   AutoLock locked(_lock);
@@ -842,7 +840,7 @@ Error VMemMgr::release(void* p) noexcept {
     // Free memory associated with node (this memory is not accessed
     // anymore so it's safe).
     vMemMgrReleaseVMem(this, node->mem, node->size);
-    Internal::releaseMemory(node->baUsed);
+    AsmJitInternal::releaseMemory(node->baUsed);
 
     node->baUsed = nullptr;
     node->baCont = nullptr;
@@ -852,14 +850,14 @@ Error VMemMgr::release(void* p) noexcept {
 
     // Remove node. This function can return different node than
     // passed into, but data is copied into previous node if needed.
-    Internal::releaseMemory(vMemMgrRemoveNode(this, node));
+    AsmJitInternal::releaseMemory(vMemMgrRemoveNode(this, node));
     ASMJIT_ASSERT(vMemMgrCheckTree(this));
   }
 
   return kErrorOk;
 }
 
-Error VMemMgr::shrink(void* p, size_t used) noexcept {
+Error VirtMem::shrink(void* p, size_t used) noexcept {
   if (!p) return kErrorOk;
   if (used == 0)
     return release(p);
@@ -946,22 +944,19 @@ static void VMemTest_fill(void* a, void* b, int i) noexcept {
   int pattern = rand() % 256;
   *(int *)a = i;
   *(int *)b = i;
-  ::memset((char*)a + sizeof(int), pattern, i - sizeof(int));
-  ::memset((char*)b + sizeof(int), pattern, i - sizeof(int));
+  ::memset((char*)a + sizeof(int), pattern, static_cast<unsigned int>(i) - sizeof(int));
+  ::memset((char*)b + sizeof(int), pattern, static_cast<unsigned int>(i) - sizeof(int));
 }
 
 static void VMemTest_verify(void* a, void* b) noexcept {
   int ai = *(int*)a;
   int bi = *(int*)b;
 
-  EXPECT(ai == bi,
-    "The length of 'a' (%d) and 'b' (%d) should be same", ai, bi);
-
-  EXPECT(::memcmp(a, b, ai) == 0,
-    "Pattern (%p) doesn't match", a);
+  EXPECT(ai == bi, "The length of 'a' (%d) and 'b' (%d) should be same", ai, bi);
+  EXPECT(::memcmp(a, b, static_cast<size_t>(ai)) == 0, "Pattern (%p) doesn't match", a);
 }
 
-static void VMemTest_stats(VMemMgr& memmgr) noexcept {
+static void VMemTest_stats(VirtMem& memmgr) noexcept {
   INFO("Used     : %u", static_cast<unsigned int>(memmgr.getUsedBytes()));
   INFO("Allocated: %u", static_cast<unsigned int>(memmgr.getAllocatedBytes()));
 }
@@ -982,7 +977,7 @@ static void VMemTest_shuffle(void** a, void** b, size_t count) noexcept {
 }
 
 UNIT(base_vmem) {
-  VMemMgr memmgr;
+  VirtMem memmgr;
 
   // Should be predictible.
   srand(100);
@@ -990,88 +985,78 @@ UNIT(base_vmem) {
   int i;
   int kCount = 200000;
 
-  INFO("Memory alloc/free test - %d allocations", static_cast<int>(kCount));
+  INFO("Memory alloc/free test - %d allocations", kCount);
 
-  void** a = (void**)Internal::allocMemory(sizeof(void*) * kCount);
-  void** b = (void**)Internal::allocMemory(sizeof(void*) * kCount);
-
-  EXPECT(a != nullptr && b != nullptr,
-    "Couldn't allocate %u bytes on heap", kCount * 2);
+  void** a = (void**)AsmJitInternal::allocMemory(sizeof(void*) * static_cast<size_t>(kCount));
+  void** b = (void**)AsmJitInternal::allocMemory(sizeof(void*) * static_cast<size_t>(kCount));
+  EXPECT(a != nullptr && b != nullptr, "Couldn't allocate %u bytes on heap", kCount * 2);
 
   INFO("Allocating virtual memory...");
   for (i = 0; i < kCount; i++) {
-    int r = (rand() % 1000) + 4;
+    size_t r = static_cast<unsigned int>(rand() % 1000) + 4;
 
     a[i] = memmgr.alloc(r);
-    EXPECT(a[i] != nullptr,
-      "Couldn't allocate %d bytes of virtual memory", r);
+    EXPECT(a[i] != nullptr, "Couldn't allocate %d bytes of virtual memory", r);
     ::memset(a[i], 0, r);
   }
   VMemTest_stats(memmgr);
 
   INFO("Freeing virtual memory...");
   for (i = 0; i < kCount; i++) {
-    EXPECT(memmgr.release(a[i]) == kErrorOk,
-      "Failed to free %p", b[i]);
+    EXPECT(memmgr.release(a[i]) == kErrorOk, "Failed to free %p", b[i]);
   }
   VMemTest_stats(memmgr);
 
-  INFO("Verified alloc/free test - %d allocations", static_cast<int>(kCount));
+  INFO("Verified alloc/free test - %d allocations", kCount);
   for (i = 0; i < kCount; i++) {
-    int r = (rand() % 1000) + 4;
+    size_t r = static_cast<unsigned int>(rand() % 1000) + 4;
 
     a[i] = memmgr.alloc(r);
-    EXPECT(a[i] != nullptr,
-      "Couldn't allocate %d bytes of virtual memory", r);
+    EXPECT(a[i] != nullptr, "Couldn't allocate %d bytes of virtual memory", r);
 
-    b[i] = Internal::allocMemory(r);
-    EXPECT(b[i] != nullptr,
-      "Couldn't allocate %d bytes on heap", r);
+    b[i] = AsmJitInternal::allocMemory(r);
+    EXPECT(b[i] != nullptr, "Couldn't allocate %d bytes on heap", r);
 
-    VMemTest_fill(a[i], b[i], r);
+    VMemTest_fill(a[i], b[i], static_cast<int>(r));
   }
   VMemTest_stats(memmgr);
 
   INFO("Shuffling...");
-  VMemTest_shuffle(a, b, kCount);
+  VMemTest_shuffle(a, b, static_cast<unsigned int>(kCount));
 
   INFO("Verify and free...");
   for (i = 0; i < kCount / 2; i++) {
     VMemTest_verify(a[i], b[i]);
-    EXPECT(memmgr.release(a[i]) == kErrorOk,
-      "Failed to free %p", a[i]);
-    Internal::releaseMemory(b[i]);
+    EXPECT(memmgr.release(a[i]) == kErrorOk, "Failed to free %p", a[i]);
+    AsmJitInternal::releaseMemory(b[i]);
   }
   VMemTest_stats(memmgr);
 
   INFO("Alloc again");
   for (i = 0; i < kCount / 2; i++) {
-    int r = (rand() % 1000) + 4;
+    size_t r = static_cast<unsigned int>(rand() % 1000) + 4;
 
     a[i] = memmgr.alloc(r);
-    EXPECT(a[i] != nullptr,
-      "Couldn't allocate %d bytes of virtual memory", r);
+    EXPECT(a[i] != nullptr, "Couldn't allocate %d bytes of virtual memory", r);
 
-    b[i] = Internal::allocMemory(r);
-    EXPECT(b[i] != nullptr,
-      "Couldn't allocate %d bytes on heap");
+    b[i] = AsmJitInternal::allocMemory(r);
+    EXPECT(b[i] != nullptr, "Couldn't allocate %d bytes on heap");
 
-    VMemTest_fill(a[i], b[i], r);
+    VMemTest_fill(a[i], b[i], static_cast<int>(r));
   }
   VMemTest_stats(memmgr);
 
   INFO("Verify and free...");
   for (i = 0; i < kCount; i++) {
     VMemTest_verify(a[i], b[i]);
-    EXPECT(memmgr.release(a[i]) == kErrorOk,
-      "Failed to free %p", a[i]);
-    Internal::releaseMemory(b[i]);
+    EXPECT(memmgr.release(a[i]) == kErrorOk, "Failed to free %p", a[i]);
+    AsmJitInternal::releaseMemory(b[i]);
   }
   VMemTest_stats(memmgr);
 
-  Internal::releaseMemory(a);
-  Internal::releaseMemory(b);
+  AsmJitInternal::releaseMemory(a);
+  AsmJitInternal::releaseMemory(b);
 }
-#endif // ASMJIT_TEST
+#endif
 
 } // asmjit namespace

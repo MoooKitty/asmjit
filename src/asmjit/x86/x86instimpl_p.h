@@ -25,13 +25,13 @@ namespace asmjit {
 //!
 //! The purpose of `X86InstImpl` is to move most of the logic out of `X86Inst`.
 struct X86InstImpl {
-  #if !defined(ASMJIT_DISABLE_VALIDATION)
+#if !defined(ASMJIT_DISABLE_VALIDATION)
   static Error validate(uint32_t archType, const Inst::Detail& detail, const Operand_* operands, uint32_t count) noexcept;
-  #endif
+#endif
 
-  #if !defined(ASMJIT_DISABLE_EXTENSIONS)
+#if !defined(ASMJIT_DISABLE_EXTENSIONS)
   static Error checkFeatures(uint32_t archType, const Inst::Detail& detail, const Operand_* operands, uint32_t count, CpuFeatures& out) noexcept;
-  #endif
+#endif
 };
 
 //! \}

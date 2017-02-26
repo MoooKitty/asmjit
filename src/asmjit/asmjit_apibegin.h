@@ -7,14 +7,14 @@
 // [Dependencies]
 #if !defined(_ASMJIT_BUILD_H)
 # include "./build.h"
-#endif // !_ASMJIT_BUILD_H
+#endif
 
 // [Guard]
 #if !defined(ASMJIT_API_SCOPE)
 # define ASMJIT_API_SCOPE
 #else
 # error "[asmjit] api-scope is already active, previous scope not closed by asmjit_apiend.h?"
-#endif // ASMJIT_API_SCOPE
+#endif
 
 // ============================================================================
 // [C++ Support]
@@ -24,19 +24,19 @@
 #if !ASMJIT_CC_HAS_NOEXCEPT && !defined(noexcept)
 # define noexcept ASMJIT_NOEXCEPT
 # define ASMJIT_UNDEF_NOEXCEPT
-#endif // !ASMJIT_CC_HAS_NOEXCEPT && !noexcept
+#endif
 
 // [NullPtr]
 #if !ASMJIT_CC_HAS_NULLPTR && !defined(nullptr)
 # define nullptr NULL
 # define ASMJIT_UNDEF_NULLPTR
-#endif // !ASMJIT_CC_HAS_NULLPTR && !nullptr
+#endif
 
 // [Override]
 #if !ASMJIT_CC_HAS_OVERRIDE && !defined(override)
 # define override
 # define ASMJIT_UNDEF_OVERRIDE
-#endif // !ASMJIT_CC_HAS_OVERRIDE && !override
+#endif
 
 // ============================================================================
 // [Compiler Support]
@@ -48,12 +48,12 @@
 # pragma clang diagnostic ignored "-Wc++11-extensions"
 # pragma clang diagnostic ignored "-Wconstant-logical-operand"
 # pragma clang diagnostic ignored "-Wunnamed-type-template-args"
-#endif // ASMJIT_CC_CLANG
+#endif
 
 // [GCC]
 #if ASMJIT_CC_GCC
 # pragma GCC diagnostic push
-#endif // ASMJIT_CC_GCC
+#endif
 
 // [MSC]
 #if ASMJIT_CC_MSC
@@ -70,13 +70,13 @@
 #  if !defined(vsnprintf)
 #   define ASMJIT_UNDEF_VSNPRINTF
 #   define vsnprintf _vsnprintf
-#  endif // !vsnprintf
+#  endif
 #  if !defined(snprintf)
 #   define ASMJIT_UNDEF_SNPRINTF
 #   define snprintf _snprintf
-#  endif // !snprintf
+#  endif
 # endif
-#endif // ASMJIT_CC_MSC
+#endif
 
 // ============================================================================
 // [Custom Macros]
@@ -107,10 +107,10 @@ private:                                                     \
   inline __VA_ARGS__(const __VA_ARGS__& other);              \
   inline __VA_ARGS__& operator=(const __VA_ARGS__& other);   \
 public:
-#endif // ASMJIT_CC_HAS_DELETE_FUNCTION
+#endif
 
 // [ASMJIT_ENUM]
-#if defined(_MSC_VER) && _MSC_VER >= 1400
+#if ASMJIT_CC_HAS_STRONG_ENUMS
 # define ASMJIT_ENUM(NAME) enum NAME : uint32_t
 #else
 # define ASMJIT_ENUM(NAME) enum NAME

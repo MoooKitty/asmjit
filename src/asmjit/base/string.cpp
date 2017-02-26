@@ -8,13 +8,36 @@
 #define ASMJIT_EXPORTS
 
 // [Dependencies]
+#include "../base/intutils.h"
 #include "../base/string.h"
-#include "../base/utils.h"
 
 // [Api-Begin]
 #include "../asmjit_apibegin.h"
 
 namespace asmjit {
+
+// ============================================================================
+// [asmjit::SmallStringBase]
+// ============================================================================
+
+Error SmallStringBase::setData(Zone* zone, uint32_t maxEmbeddedLength, const char* str, size_t len) noexcept {
+  if (len == Globals::kNullTerminated)
+    len = ::strlen(str);
+
+  if (len <= maxEmbeddedLength) {
+    ::memcpy(_embedded, str, len);
+    _embedded[len] = '\0';
+  }
+  else {
+    char* external = static_cast<char*>(zone->dup(str, len, true));
+    if (ASMJIT_UNLIKELY(!external))
+      return DebugUtils::errored(kErrorNoHeapMemory);
+    _external = external;
+  }
+
+  _length = static_cast<uint32_t>(len);
+  return kErrorOk;
+}
 
 // ============================================================================
 // [asmjit::StringBuilder - Construction / Destruction]
@@ -31,7 +54,7 @@ StringBuilder::StringBuilder() noexcept
 
 StringBuilder::~StringBuilder() noexcept {
   if (_canFree)
-    Internal::releaseMemory(_data);
+    AsmJitInternal::releaseMemory(_data);
 }
 
 // ============================================================================
@@ -51,21 +74,21 @@ ASMJIT_FAVOR_SIZE char* StringBuilder::prepare(uint32_t op, size_t len) noexcept
     }
 
     if (_capacity < len) {
-      if (len >= IntTraits<size_t>::maxValue() - sizeof(intptr_t) * 2)
+      if (len >= IntUtils::maxValue<size_t>() - sizeof(intptr_t) * 2)
         return nullptr;
 
-      size_t to = Utils::alignTo<size_t>(len, sizeof(intptr_t));
+      size_t to = IntUtils::alignTo<size_t>(len, sizeof(intptr_t));
       if (to < 256 - sizeof(intptr_t))
         to = 256 - sizeof(intptr_t);
 
-      char* newData = static_cast<char*>(Internal::allocMemory(to + sizeof(intptr_t)));
+      char* newData = static_cast<char*>(AsmJitInternal::allocMemory(to + sizeof(intptr_t)));
       if (!newData) {
         clear();
         return nullptr;
       }
 
       if (_canFree)
-        Internal::releaseMemory(_data);
+        AsmJitInternal::releaseMemory(_data);
 
       _data = newData;
       _capacity = to + sizeof(intptr_t) - 1;
@@ -85,7 +108,7 @@ ASMJIT_FAVOR_SIZE char* StringBuilder::prepare(uint32_t op, size_t len) noexcept
       return _data + _length;
 
     // Overflow.
-    if (IntTraits<size_t>::maxValue() - sizeof(intptr_t) * 2 - _length < len)
+    if (IntUtils::maxValue<size_t>() - sizeof(intptr_t) * 2 - _length < len)
       return nullptr;
 
     size_t after = _length + len;
@@ -100,17 +123,17 @@ ASMJIT_FAVOR_SIZE char* StringBuilder::prepare(uint32_t op, size_t len) noexcept
 
       if (to < after) {
         to = after;
-        if (to < (IntTraits<size_t>::maxValue() - 1024 * 32))
-          to = Utils::alignTo<size_t>(to, 1024 * 32);
+        if (to < (IntUtils::maxValue<size_t>() - 1024 * 32))
+          to = IntUtils::alignTo<size_t>(to, 1024 * 32);
       }
 
-      to = Utils::alignTo<size_t>(to, sizeof(intptr_t));
-      char* newData = static_cast<char*>(Internal::allocMemory(to + sizeof(intptr_t)));
+      to = IntUtils::alignTo<size_t>(to, sizeof(intptr_t));
+      char* newData = static_cast<char*>(AsmJitInternal::allocMemory(to + sizeof(intptr_t)));
       if (!newData) return nullptr;
 
       ::memcpy(newData, _data, _length);
       if (_canFree)
-        Internal::releaseMemory(_data);
+        AsmJitInternal::releaseMemory(_data);
 
       _data = newData;
       _capacity = to + sizeof(intptr_t) - 1;
@@ -130,18 +153,18 @@ ASMJIT_FAVOR_SIZE Error StringBuilder::reserve(size_t to) noexcept {
   if (_capacity >= to)
     return kErrorOk;
 
-  if (to >= IntTraits<size_t>::maxValue() - sizeof(intptr_t) * 2)
+  if (to >= IntUtils::maxValue<size_t>() - sizeof(intptr_t) * 2)
     return DebugUtils::errored(kErrorNoHeapMemory);
 
-  to = Utils::alignTo<size_t>(to, sizeof(intptr_t));
-  char* newData = static_cast<char*>(Internal::allocMemory(to + sizeof(intptr_t)));
+  to = IntUtils::alignTo<size_t>(to, sizeof(intptr_t));
+  char* newData = static_cast<char*>(AsmJitInternal::allocMemory(to + sizeof(intptr_t)));
 
   if (!newData)
     return DebugUtils::errored(kErrorNoHeapMemory);
 
   ::memcpy(newData, _data, _length + 1);
   if (_canFree)
-    Internal::releaseMemory(_data);
+    AsmJitInternal::releaseMemory(_data);
 
   _data = newData;
   _capacity = to + sizeof(intptr_t) - 1;
@@ -164,7 +187,7 @@ void StringBuilder::clear() noexcept {
 // ============================================================================
 
 Error StringBuilder::_opString(uint32_t op, const char* str, size_t len) noexcept {
-  if (len == Globals::kInvalidIndex)
+  if (len == Globals::kNullTerminated)
     len = str ? ::strlen(str) : static_cast<size_t>(0);
 
   char* p = prepare(op, len);
@@ -188,6 +211,14 @@ Error StringBuilder::_opChars(uint32_t op, char c, size_t n) noexcept {
 
   ::memset(p, c, n);
   return kErrorOk;
+}
+
+Error StringBuilder::padEnd(size_t n, char c) noexcept {
+  size_t len = _length;
+  if (n <= len)
+    return kErrorOk;
+
+  return appendChars(c, n - len);
 }
 
 static const char StringBuilder_numbers[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -284,7 +315,7 @@ Error StringBuilder::_opNumber(uint32_t op, uint64_t i, uint32_t base, size_t wi
 Error StringBuilder::_opHex(uint32_t op, const void* data, size_t len) noexcept {
   char* dst;
 
-  if (len >= IntTraits<size_t>::maxValue() / 2 || !(dst = prepare(op, len * 2)))
+  if (len >= IntUtils::maxValue<size_t>() / 2 || !(dst = prepare(op, len * 2)))
     return DebugUtils::errored(kErrorNoHeapMemory);;
 
   const char* src = static_cast<const char*>(data);
@@ -305,7 +336,7 @@ Error StringBuilder::_opVFormat(uint32_t op, const char* fmt, va_list ap) noexce
 }
 
 Error StringBuilder::setFormat(const char* fmt, ...) noexcept {
-  bool result;
+  Error result;
 
   va_list ap;
   va_start(ap, fmt);
@@ -316,7 +347,7 @@ Error StringBuilder::setFormat(const char* fmt, ...) noexcept {
 }
 
 Error StringBuilder::appendFormat(const char* fmt, ...) noexcept {
-  bool result;
+  Error result;
 
   va_list ap;
   va_start(ap, fmt);
@@ -333,7 +364,7 @@ bool StringBuilder::eq(const char* str, size_t len) const noexcept {
   size_t aLength = _length;
   size_t bLength = len;
 
-  if (bLength == Globals::kInvalidIndex) {
+  if (bLength == Globals::kNullTerminated) {
     size_t i;
     for (i = 0; i < aLength; i++)
       if (aData[i] != bData[i] || bData[i] == 0)

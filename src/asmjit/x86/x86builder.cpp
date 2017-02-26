@@ -12,6 +12,7 @@
 #if defined(ASMJIT_BUILD_X86) && !defined(ASMJIT_DISABLE_COMPILER)
 
 // [Dependencies]
+#include "../x86/x86assembler.h"
 #include "../x86/x86builder.h"
 
 // [Api-Begin]
@@ -30,6 +31,17 @@ X86Builder::X86Builder(CodeHolder* code) noexcept : CodeBuilder() {
 X86Builder::~X86Builder() noexcept {}
 
 // ============================================================================
+// [asmjit::X86Builder - Finalize]
+// ============================================================================
+
+Error X86Builder::finalize() {
+  ASMJIT_PROPAGATE(runPasses());
+
+  X86Assembler a(_code);
+  return serialize(&a);
+}
+
+// ============================================================================
 // [asmjit::X86Builder - Events]
 // ============================================================================
 
@@ -41,19 +53,10 @@ Error X86Builder::onAttach(CodeHolder* code) noexcept {
   ASMJIT_PROPAGATE(Base::onAttach(code));
 
   if (archType == ArchInfo::kTypeX86)
-    _nativeGpArray = x86OpData.gpd;
+    _gpRegInfo.setSignature(x86OpData.gpd[0].getSignature());
   else
-    _nativeGpArray = x86OpData.gpq;
-  _nativeGpReg = _nativeGpArray[0];
-  return kErrorOk;
-}
+    _gpRegInfo.setSignature(x86OpData.gpq[0].getSignature());
 
-// ============================================================================
-// [asmjit::X86Builder - Inst]
-// ============================================================================
-
-Error X86Builder::_emit(uint32_t instId, const Operand_& o0, const Operand_& o1, const Operand_& o2, const Operand_& o3) {
-  // TODO:
   return kErrorOk;
 }
 

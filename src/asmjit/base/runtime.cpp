@@ -21,13 +21,13 @@ static ASMJIT_INLINE void hostFlushInstructionCache(const void* p, size_t size) 
   // Only useful on non-x86 architectures.
 #if !ASMJIT_ARCH_X86 && !ASMJIT_ARCH_X64
 # if ASMJIT_OS_WINDOWS
-  // Windows has a built-in support in kernel32.dll.
+  // Windows has a built-in support in `kernel32.dll`.
   ::FlushInstructionCache(_memMgr.getProcessHandle(), p, size);
-# endif // ASMJIT_OS_WINDOWS
+# endif
 #else
   ASMJIT_UNUSED(p);
   ASMJIT_UNUSED(size);
-#endif // !ASMJIT_ARCH_X86 && !ASMJIT_ARCH_X64
+#endif
 }
 
 static ASMJIT_INLINE uint32_t hostDetectNaturalStackAlignment() noexcept {
@@ -43,9 +43,7 @@ static ASMJIT_INLINE uint32_t hostDetectNaturalStackAlignment() noexcept {
   //!    is addition to an older specification.
   //   - 64-bit X86 requires stack to be aligned to at least 16 bytes.
 #if ASMJIT_ARCH_X86 || ASMJIT_ARCH_X64
-  int kIsModernOS = ASMJIT_OS_LINUX  || // Linux & ANDROID.
-                    ASMJIT_OS_MAC    || // OSX and iOS.
-                    ASMJIT_OS_BSD    ;  // BSD variants.
+  int kIsModernOS = ASMJIT_OS_BSD || ASMJIT_OS_LINUX || ASMJIT_OS_MAC;
   alignment = ASMJIT_ARCH_X64 || kIsModernOS ? 16 : 4;
 #endif
 
@@ -69,7 +67,7 @@ static ASMJIT_INLINE uint32_t hostDetectNaturalStackAlignment() noexcept {
 Runtime::Runtime() noexcept
   : _codeInfo(),
     _runtimeType(kRuntimeNone),
-    _allocType(VMemMgr::kAllocFreeable) {}
+    _allocType(VirtMem::kAllocFreeable) {}
 Runtime::~Runtime() noexcept {}
 
 // ============================================================================
@@ -81,7 +79,7 @@ HostRuntime::HostRuntime() noexcept {
 
   // Setup the CodeInfo of this Runtime.
   _codeInfo._archInfo       = CpuInfo::getHost().getArchInfo();
-  _codeInfo._stackAlignment = static_cast<uint8_t>(hostDetectNaturalStackAlignment());
+  _codeInfo._stackAlignment = IntUtils::toUInt8(hostDetectNaturalStackAlignment());
   _codeInfo._cdeclCallConv  = CallConv::kIdHostCDecl;
   _codeInfo._stdCallConv    = CallConv::kIdHostStdCall;
   _codeInfo._fastCallConv   = CallConv::kIdHostFastCall;
@@ -120,7 +118,7 @@ Error JitRuntime::_add(void** dst, CodeHolder* code) noexcept {
     return DebugUtils::errored(kErrorNoVirtualMemory);
   }
 
-  // Relocate the code and release the unused memory back to `VMemMgr`.
+  // Relocate the code and release the unused memory back to `VirtMem`.
   size_t relocSize = code->relocate(p);
   if (ASMJIT_UNLIKELY(relocSize == 0)) {
     *dst = nullptr;

@@ -125,22 +125,17 @@ UNIT(base_operand) {
   EXPECT(label.getId() == 0);
 
   INFO("Checking basic functionality of Reg");
-  EXPECT(Reg().isValid() == false,
-    "Default constructed Reg() should not be valid");
-  EXPECT(Reg()._any.reserved8_4 == 0,
-    "A default constructed Reg() should zero its 'reserved8_4' field");
-  EXPECT(Reg()._any.reserved12_4 == 0,
-    "A default constructed Reg() should zero its 'reserved12_4' field");
+  EXPECT(Reg().isReg() == false);
+  EXPECT(Reg().isValid() == false);
 
-  EXPECT(Reg().isReg() == false,
-    "Default constructed register should not isReg()");
-  EXPECT(dummy.as<Reg>().isValid() == false,
-    "Default constructed Operand casted to Reg should not be valid");
+  EXPECT(Reg()._any.reserved8_4  == 0, "A default constructed Reg() should zero its 'reserved8_4' field");
+  EXPECT(Reg()._any.reserved12_4 == 0, "A default constructed Reg() should zero its 'reserved12_4' field");
+  EXPECT(dummy.as<Reg>().isValid() == false, "Default constructed Operand casted to Reg should not be valid");
 
   // Create some register (not specific to any architecture).
-  uint32_t rSig = Operand::kOpReg | (1 << Operand::kSignatureRegTypeShift) |
-                                    (2 << Operand::kSignatureRegKindShift) |
-                                    (8 << Operand::kSignatureSizeShift   ) ;
+  uint32_t rSig = Operand::kOpReg | (1 << Operand::kSignatureRegTypeShift ) |
+                                    (2 << Operand::kSignatureRegGroupShift) |
+                                    (8 << Operand::kSignatureSizeShift    ) ;
   Reg r1(Reg::fromSignature(rSig, 5));
 
   EXPECT(r1.isValid()      == true);
@@ -150,7 +145,7 @@ UNIT(base_operand) {
   EXPECT(r1.isVirtReg()    == false);
   EXPECT(r1.getSignature() == rSig);
   EXPECT(r1.getType()      == 1);
-  EXPECT(r1.getKind()      == 2);
+  EXPECT(r1.getGroup()     == 2);
   EXPECT(r1.getSize()      == 8);
   EXPECT(r1.getId()        == 5);
   EXPECT(r1.isReg(1, 5)    == true); // RegType and Id.
@@ -167,7 +162,7 @@ UNIT(base_operand) {
   EXPECT(r2.isVirtReg()    == false);
   EXPECT(r2.getSignature() == rSig);
   EXPECT(r2.getType()      == r1.getType());
-  EXPECT(r2.getKind()      == r1.getKind());
+  EXPECT(r2.getGroup()     == r1.getGroup());
   EXPECT(r2.getSize()      == r1.getSize());
   EXPECT(r2.getId()        == 6);
   EXPECT(r2.isReg(1, 6)    == true);
@@ -180,8 +175,8 @@ UNIT(base_operand) {
 
   INFO("Checking basic functionality of Mem");
   Mem m;
-  EXPECT(m.isMem()                       , "Default constructed Mem() should isMem()");
-  EXPECT(m == Mem()                      , "Two default constructed Mem() operands should be equal");
+  EXPECT(m.isMem());
+  EXPECT(m == Mem());
   EXPECT(m.hasBase()        == false     , "Default constructed Mem() should not have base specified");
   EXPECT(m.hasIndex()       == false     , "Default constructed Mem() should not have index specified");
   EXPECT(m.has64BitOffset() == true      , "Default constructed Mem() should report 64-bit offset");
@@ -192,16 +187,16 @@ UNIT(base_operand) {
   EXPECT(m.getOffset()      == -1        , "32-bit offset must be sign extended to 64 bits");
 
   int64_t x = int64_t(ASMJIT_UINT64_C(0xFF00FF0000000001));
+  int32_t xHi = int32_t(0xFF00FF00);
   m.setOffset(x);
   EXPECT(m.getOffset()      == x         , "Memory operand must hold a 64-bit offset");
   EXPECT(m.getOffsetLo32()  == 1         , "Memory operand must return correct low offset DWORD");
-  EXPECT(m.getOffsetHi32()  == 0xFF00FF00, "Memory operand must return correct high offset DWORD");
+  EXPECT(m.getOffsetHi32()  == xHi       , "Memory operand must return correct high offset DWORD");
 
   INFO("Checking basic functionality of Imm");
-  EXPECT(Imm(-1).getInt64() == int64_t(-1),
-    "Immediate values should by default sign-extend to 64-bits");
+  EXPECT(Imm(-1).getInt64() == int64_t(-1), "Immediate values should by default sign-extend to 64-bits");
 }
-#endif // ASMJIT_TEST
+#endif
 
 } // asmjit namespace
 

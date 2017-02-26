@@ -9,7 +9,7 @@
 #define _ASMJIT_BASE_STRING_H
 
 // [Dependencies]
-#include "../base/globals.h"
+#include "../base/zone.h"
 
 // [Api-Begin]
 #include "../asmjit_apibegin.h"
@@ -20,53 +20,126 @@ namespace asmjit {
 //! \{
 
 // ============================================================================
-// [asmjit::SmallString]
+// [asmjit::StringUtils]
 // ============================================================================
 
-//! Small string is a template that helps to create strings that can be either
-//! statically allocated if they are small, or externally allocated in case
-//! their length exceed the limit. The `WholeSize` represents the size of the
-//! whole `SmallString` structure, based on that size the maximum size of the
-//! internal buffer is determined.
-template<size_t WholeSize>
-class SmallString {
-public:
-  enum { kMaxEmbeddedLength = WholeSize - 5 };
+namespace StringUtils {
+  template<typename T>
+  static ASMJIT_INLINE T toLower(T c) noexcept { return c ^ (static_cast<T>(c >= T('A') && c <= T('Z')) << 5); }
 
-  ASMJIT_INLINE SmallString() noexcept { reset(); }
-  ASMJIT_INLINE void reset() noexcept { ::memset(this, 0, sizeof(*this)); }
+  template<typename T>
+  static ASMJIT_INLINE T toUpper(T c) noexcept { return c ^ (static_cast<T>(c >= T('a') && c <= T('z')) << 5); }
 
-  ASMJIT_INLINE bool isEmpty() const noexcept { return _length == 0; }
-  ASMJIT_INLINE bool isEmbedded() const noexcept { return _length <= kMaxEmbeddedLength; }
-  ASMJIT_INLINE bool mustEmbed(size_t len) const noexcept { return len <= kMaxEmbeddedLength; }
-
-  ASMJIT_INLINE uint32_t getLength() const noexcept { return _length; }
-  ASMJIT_INLINE char* getData() const noexcept {
-    return _length <= kMaxEmbeddedLength ? const_cast<char*>(_embedded) : _external[1];
+  static ASMJIT_INLINE size_t strLen(const char* s, size_t maxlen) noexcept {
+    size_t i;
+    for (i = 0; i < maxlen; i++)
+      if (!s[i])
+        break;
+    return i;
   }
 
-  ASMJIT_INLINE void setEmbedded(const char* data, size_t len) noexcept {
-    ASMJIT_ASSERT(len <= kMaxEmbeddedLength);
-
-    _length = static_cast<uint32_t>(len);
-    ::memcpy(_embedded, data, len);
-    _embedded[len] = '\0';
+  static ASMJIT_INLINE const char* findPackedString(const char* p, uint32_t id) noexcept {
+    uint32_t i = 0;
+    while (i < id) {
+      while (p[0])
+        p++;
+      p++;
+      i++;
+    }
+    return p;
   }
 
-  ASMJIT_INLINE void setExternal(const char* data, size_t len) noexcept {
-    ASMJIT_ASSERT(len > kMaxEmbeddedLength);
-    ASMJIT_ASSERT(len <= ~static_cast<uint32_t>(0));
+  //! \internal
+  //!
+  //! Compare two instruction names.
+  //!
+  //! `a` is a null terminated instruction name from `???InstDB::nameData[]` table.
+  //! `b` is a non-null terminated instruction name passed to `???Inst::getIdByName()`.
+  static ASMJIT_INLINE int cmpInstName(const char* a, const char* b, size_t len) noexcept {
+    for (size_t i = 0; i < len; i++) {
+      int c = static_cast<int>(static_cast<uint8_t>(a[i])) -
+              static_cast<int>(static_cast<uint8_t>(b[i])) ;
+      if (c != 0) return c;
+    }
 
-    _length = static_cast<uint32_t>(len);
-    _external[1] = const_cast<char*>(data);
+    return static_cast<int>(a[len]);
   }
+} // StringUtils namespace
+
+// ============================================================================
+// [asmjit::SmallStringBase]
+// ============================================================================
+
+struct SmallStringBase {
+  ASMJIT_INLINE void reset() noexcept {
+    _dummy = nullptr;
+    _external = nullptr;
+  }
+
+  ASMJIT_API Error setData(Zone* zone, uint32_t maxEmbeddedLength, const char* str, size_t len) noexcept;
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
 
   union {
     struct {
       uint32_t _length;
-      char _embedded[WholeSize - 4];
+      char _embedded[sizeof(void*) * 2 - 4];
     };
-    char* _external[2];
+    struct {
+      void* _dummy;
+      char* _external;
+    };
+  };
+};
+
+// ============================================================================
+// [asmjit::SmallString<N>]
+// ============================================================================
+
+//! Small string is a template that helps to create strings that can be either
+//! statically allocated if they are small, or externally allocated in case
+//! their length exceeds the limit. The `N` represents the size of the whole
+//! `SmallString` structure, based on that size the maximum size of the internal
+//! buffer is determined.
+template<size_t N>
+class SmallString {
+public:
+  enum {
+    kWholeSize = N > sizeof(SmallStringBase) ? static_cast<unsigned int>(N)
+                                             : static_cast<unsigned int>(sizeof(SmallStringBase)),
+    kMaxEmbeddedLength = kWholeSize - 5
+  };
+
+  // --------------------------------------------------------------------------
+  // [Construction / Destruction]
+  // --------------------------------------------------------------------------
+
+  ASMJIT_INLINE SmallString() noexcept { reset(); }
+  ASMJIT_INLINE void reset() noexcept { _base.reset(); }
+
+  // --------------------------------------------------------------------------
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  ASMJIT_INLINE bool isEmpty() const noexcept { return _base._length == 0; }
+  ASMJIT_INLINE bool isEmbedded() const noexcept { return _base._length <= kMaxEmbeddedLength; }
+
+  ASMJIT_INLINE uint32_t getLength() const noexcept { return _base._length; }
+  ASMJIT_INLINE const char* getData() const noexcept { return _base._length <= kMaxEmbeddedLength ? _base._embedded : _base._external; }
+
+  ASMJIT_INLINE Error setData(Zone* zone, const char* data, size_t len) noexcept {
+    return _base.setData(zone, kMaxEmbeddedLength, data, len);
+  }
+
+  // --------------------------------------------------------------------------
+  // [Members]
+  // --------------------------------------------------------------------------
+
+  union {
+    SmallStringBase _base;
+    char _wholeData[kWholeSize];
   };
 };
 
@@ -117,6 +190,9 @@ public:
   // [Accessors]
   // --------------------------------------------------------------------------
 
+  //! Get if the string is empty.
+  ASMJIT_INLINE bool isEmpty() const noexcept { return _length == 0; }
+
   //! Get string builder capacity.
   ASMJIT_INLINE size_t getCapacity() const noexcept { return _capacity; }
   //! Get length.
@@ -148,7 +224,7 @@ public:
   // [Op]
   // --------------------------------------------------------------------------
 
-  ASMJIT_API Error _opString(uint32_t op, const char* str, size_t len = Globals::kInvalidIndex) noexcept;
+  ASMJIT_API Error _opString(uint32_t op, const char* str, size_t len = Globals::kNullTerminated) noexcept;
   ASMJIT_API Error _opVFormat(uint32_t op, const char* fmt, va_list ap) noexcept;
   ASMJIT_API Error _opChar(uint32_t op, char c) noexcept;
   ASMJIT_API Error _opChars(uint32_t op, char c, size_t n) noexcept;
@@ -159,8 +235,8 @@ public:
   // [Set]
   // --------------------------------------------------------------------------
 
-  //! Replace the current string with `str` having `len` characters (or `kInvalidIndex` if it's null terminated).
-  ASMJIT_INLINE Error setString(const char* str, size_t len = Globals::kInvalidIndex) noexcept { return _opString(kStringOpSet, str, len); }
+  //! Replace the current string with `str` having `len` characters (or possibly null terminated).
+  ASMJIT_INLINE Error setString(const char* str, size_t len = Globals::kNullTerminated) noexcept { return _opString(kStringOpSet, str, len); }
   //! Replace the current content by a formatted string `fmt`.
   ASMJIT_API Error setFormat(const char* fmt, ...) noexcept;
   //! Replace the current content by a formatted string `fmt` (va_list version).
@@ -190,8 +266,8 @@ public:
   // [Append]
   // --------------------------------------------------------------------------
 
-  //! Append string `str` having `len` characters (or `kInvalidIndex` if it's null terminated).
-  ASMJIT_INLINE Error appendString(const char* str, size_t len = Globals::kInvalidIndex) noexcept { return _opString(kStringOpAppend, str, len); }
+  //! Append string `str` having `len` characters (or possibly null terminated).
+  ASMJIT_INLINE Error appendString(const char* str, size_t len = Globals::kNullTerminated) noexcept { return _opString(kStringOpAppend, str, len); }
   //! Append a formatted string `fmt`.
   ASMJIT_API Error appendFormat(const char* fmt, ...) noexcept;
   //! Append a formatted string `fmt` (va_list version).
@@ -201,6 +277,8 @@ public:
   ASMJIT_INLINE Error appendChar(char c) noexcept { return _opChar(kStringOpAppend, c); }
   //! Append `c` character `n` times.
   ASMJIT_INLINE Error appendChars(char c, size_t n) noexcept { return _opChars(kStringOpAppend, c, n); }
+
+  ASMJIT_API Error padEnd(size_t n, char c = ' ') noexcept;
 
   //! Append `i`.
   ASMJIT_INLINE Error appendInt(int64_t i, uint32_t base = 0, size_t width = 0, uint32_t flags = 0) noexcept {
@@ -222,7 +300,7 @@ public:
   // --------------------------------------------------------------------------
 
   //! Check for equality with other `str` of length `len`.
-  ASMJIT_API bool eq(const char* str, size_t len = Globals::kInvalidIndex) const noexcept;
+  ASMJIT_API bool eq(const char* str, size_t len = Globals::kNullTerminated) const noexcept;
   //! Check for equality with `other`.
   ASMJIT_INLINE bool eq(const StringBuilder& other) const noexcept { return eq(other._data, other._length); }
 
@@ -274,8 +352,7 @@ public:
   // --------------------------------------------------------------------------
 
   //! Embedded data.
-  char _embeddedData[static_cast<size_t>(
-    N + 1 + sizeof(intptr_t)) & ~static_cast<size_t>(sizeof(intptr_t) - 1)];
+  char _embeddedData[static_cast<size_t>(N + 1 + sizeof(intptr_t)) & ~static_cast<size_t>(sizeof(intptr_t) - 1)];
 };
 
 //! \}

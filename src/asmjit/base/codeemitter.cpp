@@ -9,15 +9,19 @@
 
 // [Dependencies]
 #include "../base/assembler.h"
+#include "../base/intutils.h"
+#include "../base/logging.h"
 #include "../base/utils.h"
-#include "../base/vmem.h"
+#include "../base/virtmem.h"
 
 #if defined(ASMJIT_BUILD_X86)
-#include "../x86/x86inst.h"
+# include "../x86/x86internal_p.h"
+# include "../x86/x86inst.h"
 #endif // ASMJIT_BUILD_X86
 
 #if defined(ASMJIT_BUILD_ARM)
-#include "../arm/arminst.h"
+# include "../arm/arminternal_p.h"
+# include "../arm/arminst.h"
 #endif // ASMJIT_BUILD_ARM
 
 // [Api-Begin]
@@ -30,81 +34,44 @@ namespace asmjit {
 // ============================================================================
 
 CodeEmitter::CodeEmitter(uint32_t type) noexcept
-  : _codeInfo(),
-    _code(nullptr),
-    _nextEmitter(nullptr),
-    _type(static_cast<uint8_t>(type)),
-    _destroyed(false),
-    _finalized(false),
-    _reserved(false),
+  : _type(IntUtils::toUInt8(type)),
+    _reserved(0),
+    _flags(0),
     _lastError(kErrorNotInitialized),
+    _code(nullptr),
+    _errorHandler(nullptr),
+    _codeInfo(),
+    _gpRegInfo(),
+    _emitterOptions(0),
     _privateData(0),
-    _globalHints(0),
-    _globalOptions(kOptionMaybeFailureCase),
-    _options(0),
+    _instOptions(0),
+    _globalInstOptions(Inst::kOptionReserved),
     _extraReg(),
     _inlineComment(nullptr),
-    _none(),
-    _nativeGpReg(),
-    _nativeGpArray(nullptr) {}
+    _none() {}
 
 CodeEmitter::~CodeEmitter() noexcept {
   if (_code) {
-    _destroyed = true;
+    _addFlags(kFlagDestroyed);
     _code->detach(this);
   }
-}
-
-// ============================================================================
-// [asmjit::CodeEmitter - Events]
-// ============================================================================
-
-Error CodeEmitter::onAttach(CodeHolder* code) noexcept {
-  _codeInfo = code->getCodeInfo();
-  _lastError = kErrorOk;
-
-  _globalHints = code->getGlobalHints();
-  _globalOptions = code->getGlobalOptions();
-
-  return kErrorOk;
-}
-
-Error CodeEmitter::onDetach(CodeHolder* code) noexcept {
-  _codeInfo.reset();
-  _finalized = false;
-  _lastError = kErrorNotInitialized;
-
-  _privateData = 0;
-  _globalHints = 0;
-  _globalOptions = kOptionMaybeFailureCase;
-
-  _options = 0;
-  _extraReg.reset();
-  _inlineComment = nullptr;
-
-  _nativeGpReg.reset();
-  _nativeGpArray = nullptr;
-
-  return kErrorOk;
 }
 
 // ============================================================================
 // [asmjit::CodeEmitter - Code-Generation]
 // ============================================================================
 
-Error CodeEmitter::_emitOpArray(uint32_t instId, const Operand_* opArray, size_t opCount) {
-  const Operand_* op = opArray;
-  switch (opCount) {
-    case 0: return _emit(instId, _none, _none, _none, _none);
-    case 1: return _emit(instId, op[0], _none, _none, _none);
-    case 2: return _emit(instId, op[0], op[1], _none, _none);
-    case 3: return _emit(instId, op[0], op[1], op[2], _none);
-    case 4: return _emit(instId, op[0], op[1], op[2], op[3]);
-    case 5: return _emit(instId, op[0], op[1], op[2], op[3], op[4], _none);
-    case 6: return _emit(instId, op[0], op[1], op[2], op[3], op[4], op[5]);
-
-    default:
-      return DebugUtils::errored(kErrorInvalidArgument);
+Error CodeEmitter::_emitOpArray(uint32_t instId, const Operand_* operands, size_t count) {
+  const Operand_* op = operands;
+  switch (count) {
+    case  0: return _emit(instId, _none, _none, _none, _none);
+    case  1: return _emit(instId, op[0], _none, _none, _none);
+    case  2: return _emit(instId, op[0], op[1], _none, _none);
+    case  3: return _emit(instId, op[0], op[1], op[2], _none);
+    case  4: return _emit(instId, op[0], op[1], op[2], op[3]);
+    case  5: return _emit(instId, op[0], op[1], op[2], op[3], op[4], _none);
+    case  6: return _emit(instId, op[0], op[1], op[2], op[3], op[4], op[5]);
+    default: return DebugUtils::errored(kErrorInvalidArgument);
   }
 }
 
@@ -121,7 +88,7 @@ Label CodeEmitter::getLabelByName(const char* name, size_t nameLength, uint32_t 
 // ============================================================================
 
 Error CodeEmitter::finalize() {
-  // Finalization does nothing by default, overridden by `CodeBuilder`.
+  // Does nothing by default, overridden by `CodeBuilder` and `CodeCompiler`.
   return kErrorOk;
 }
 
@@ -130,13 +97,16 @@ Error CodeEmitter::finalize() {
 // ============================================================================
 
 Error CodeEmitter::setLastError(Error error, const char* message) {
-  // This is fatal, CodeEmitter can't set error without being attached to `CodeHolder`.
-  ASMJIT_ASSERT(_code != nullptr);
+  // Don't change anything if the emitter is not attached to `CodeHolder`.
+  if (_code == nullptr)
+    return error;
 
   // Special case used to reset the last error.
   if (error == kErrorOk) {
     _lastError = kErrorOk;
-    _globalOptions &= ~kOptionMaybeFailureCase;
+
+    // This may clear `Inst::kOptionReserved` bit in `_globalInstOptions`.
+    onUpdateGlobalInstOptions();
     return kErrorOk;
   }
 
@@ -144,7 +114,10 @@ Error CodeEmitter::setLastError(Error error, const char* message) {
     message = DebugUtils::errorAsString(error);
 
   // Logging is skipped if the error is handled by `ErrorHandler`.
-  ErrorHandler* handler = _code->_errorHandler;
+  ErrorHandler* handler = getErrorHandler();
+  if (!handler)
+    handler = getCode()->getErrorHandler();
+
   if (handler && handler->handleError(error, message, this))
     return error;
 
@@ -152,55 +125,26 @@ Error CodeEmitter::setLastError(Error error, const char* message) {
   // to terminate the execution of `setLastError()`. This is the reason why
   // we have delayed changing the `_error` member until now.
   _lastError = error;
-  _globalOptions |= kOptionMaybeFailureCase;
+
+  // This is the same as calling `onUpdateGlobalInstOptions()`, since it only
+  // updates the `Inst::kOptionReserved` bit we can do it manually here as we
+  // know that we are in error state and this bit MUST BE set.
+  _globalInstOptions |= Inst::kOptionReserved;
 
   return error;
 }
 
 // ============================================================================
-// [asmjit::CodeEmitter - Helpers]
+// [asmjit::CodeEmitter - Label Management]
 // ============================================================================
 
 bool CodeEmitter::isLabelValid(uint32_t id) const noexcept {
-  size_t index = Operand::unpackId(id);
-  return _code && index < _code->_labels.getLength();
-}
-
-Error CodeEmitter::commentf(const char* fmt, ...) {
-  Error err = _lastError;
-  if (err) return err;
-
-#if !defined(ASMJIT_DISABLE_LOGGING)
-  if (_globalOptions & kOptionLoggingEnabled) {
-    va_list ap;
-    va_start(ap, fmt);
-    err = _code->_logger->logv(fmt, ap);
-    va_end(ap);
-  }
-#else
-  ASMJIT_UNUSED(fmt);
-#endif
-
-  return err;
-}
-
-Error CodeEmitter::commentv(const char* fmt, va_list ap) {
-  Error err = _lastError;
-  if (err) return err;
-
-#if !defined(ASMJIT_DISABLE_LOGGING)
-  if (_globalOptions & kOptionLoggingEnabled)
-    err = _code->_logger->logv(fmt, ap);
-#else
-  ASMJIT_UNUSED(fmt);
-  ASMJIT_UNUSED(ap);
-#endif
-
-  return err;
+  uint32_t index = Operand::unpackId(id);
+  return _code && index < _code->getLabelCount();
 }
 
 // ============================================================================
-// [asmjit::CodeEmitter - Emit]
+// [asmjit::CodeEmitter - Emit (Low-Level)]
 // ============================================================================
 
 #define OP const Operand_&
@@ -224,11 +168,139 @@ Error CodeEmitter::emit(uint32_t instId, int64_t o0) { return _emit(instId, Imm(
 Error CodeEmitter::emit(uint32_t instId, OP o0, int64_t o1) { return _emit(instId, o0, Imm(o1), _none, _none); }
 Error CodeEmitter::emit(uint32_t instId, OP o0, OP o1, int64_t o2) { return _emit(instId, o0, o1, Imm(o2), _none); }
 Error CodeEmitter::emit(uint32_t instId, OP o0, OP o1, OP o2, int64_t o3) { return _emit(instId, o0, o1, o2, Imm(o3)); }
-
 Error CodeEmitter::emit(uint32_t instId, OP o0, OP o1, OP o2, OP o3, int64_t o4) { return _emit(instId, o0, o1, o2, o3, Imm(o4), _none); }
 Error CodeEmitter::emit(uint32_t instId, OP o0, OP o1, OP o2, OP o3, OP o4, int64_t o5) { return _emit(instId, o0, o1, o2, o3, o4, Imm(o5)); }
 
 #undef OP
+
+// ============================================================================
+// [asmjit::CodeEmitter - Emit (High-Level)]
+// ============================================================================
+
+ASMJIT_FAVOR_SIZE Error CodeEmitter::emitProlog(const FuncFrame& frame) {
+#if defined(ASMJIT_BUILD_X86)
+  if (getArchInfo().isX86Family())
+    return X86Internal::emitProlog(static_cast<X86Emitter*>(this), frame);
+#endif
+
+#if defined(ASMJIT_BUILD_ARM)
+  if (getArchInfo().isArmFamily())
+    return ArmInternal::emitProlog(static_cast<ArmEmitter*>(this), frame);
+#endif
+
+  return DebugUtils::errored(kErrorInvalidArch);
+}
+
+ASMJIT_FAVOR_SIZE Error CodeEmitter::emitEpilog(const FuncFrame& frame) {
+#if defined(ASMJIT_BUILD_X86)
+  if (getArchInfo().isX86Family())
+    return X86Internal::emitEpilog(static_cast<X86Emitter*>(this), frame);
+#endif
+
+#if defined(ASMJIT_BUILD_ARM)
+  if (getArchInfo().isArmFamily())
+    return ArmInternal::emitEpilog(static_cast<ArmEmitter*>(this), frame);
+#endif
+
+  return DebugUtils::errored(kErrorInvalidArch);
+}
+
+ASMJIT_FAVOR_SIZE Error CodeEmitter::emitArgsAssignment(const FuncFrame& frame, const FuncArgsAssignment& args) {
+#if defined(ASMJIT_BUILD_X86)
+  if (getArchInfo().isX86Family())
+    return X86Internal::emitArgsAssignment(static_cast<X86Emitter*>(this), frame, args);
+#endif
+
+#if defined(ASMJIT_BUILD_ARM)
+  if (getArchInfo().isArmFamily())
+    return ArmInternal::emitArgsAssignment(static_cast<ArmEmitter*>(this), frame, args);
+#endif
+
+  return DebugUtils::errored(kErrorInvalidArch);
+}
+
+// ============================================================================
+// [asmjit::CodeEmitter - Comment]
+// ============================================================================
+
+Error CodeEmitter::commentf(const char* fmt, ...) {
+  Error err = _lastError;
+  if (ASMJIT_UNLIKELY(err))
+    return err;
+
+#if !defined(ASMJIT_DISABLE_LOGGING)
+  if (hasEmitterOption(kOptionLoggingEnabled)) {
+    va_list ap;
+    va_start(ap, fmt);
+    err = _code->_logger->logv(fmt, ap);
+    va_end(ap);
+  }
+#else
+  ASMJIT_UNUSED(fmt);
+#endif
+
+  return err;
+}
+
+Error CodeEmitter::commentv(const char* fmt, va_list ap) {
+  Error err = _lastError;
+  if (ASMJIT_UNLIKELY(err))
+    return err;
+
+#if !defined(ASMJIT_DISABLE_LOGGING)
+  if (hasEmitterOption(kOptionLoggingEnabled))
+    err = _code->_logger->logv(fmt, ap);
+#else
+  ASMJIT_UNUSED(fmt);
+  ASMJIT_UNUSED(ap);
+#endif
+
+  return err;
+}
+
+// ============================================================================
+// [asmjit::CodeEmitter - Events]
+// ============================================================================
+
+Error CodeEmitter::onAttach(CodeHolder* code) noexcept {
+  _lastError = kErrorOk;
+  _codeInfo = code->getCodeInfo();
+  _emitterOptions = code->getEmitterOptions();
+
+  onUpdateGlobalInstOptions();
+  return kErrorOk;
+}
+
+Error CodeEmitter::onDetach(CodeHolder* code) noexcept {
+  ASMJIT_UNUSED(code);
+
+  _flags = 0;
+  _lastError = kErrorNotInitialized;
+  _errorHandler = nullptr;
+
+  _codeInfo.reset();
+  _gpRegInfo.reset();
+
+  _emitterOptions = 0;
+  _privateData = 0;
+
+  _instOptions = 0;
+  _globalInstOptions = Inst::kOptionReserved;
+  _extraReg.reset();
+  _inlineComment = nullptr;
+
+  return kErrorOk;
+}
+
+void CodeEmitter::onUpdateGlobalInstOptions() noexcept {
+  const uint32_t kCriticalEmitterOptions = kOptionLoggingEnabled   |
+                                           kOptionStrictValidation ;
+
+  _globalInstOptions &= ~Inst::kOptionReserved;
+  if (_lastError != kErrorOk || (_emitterOptions & kCriticalEmitterOptions) != 0) {
+    _globalInstOptions |= Inst::kOptionReserved;
+  }
+}
 
 } // asmjit namespace
 

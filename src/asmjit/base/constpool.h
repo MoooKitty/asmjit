@@ -161,7 +161,7 @@ Visit:
     // --------------------------------------------------------------------------
 
     static ASMJIT_INLINE Node* _newNode(Zone* zone, const void* data, size_t size, size_t offset, bool shared) noexcept {
-      Node* node = zone->allocT<Node>(sizeof(Node) + size);
+      Node* node = zone->allocAlignedT<Node>(sizeof(Node) + size, sizeof(void*));
       if (ASMJIT_UNLIKELY(!node)) return nullptr;
 
       node->_link[0] = nullptr;

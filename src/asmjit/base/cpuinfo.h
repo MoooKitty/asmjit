@@ -25,11 +25,11 @@ namespace asmjit {
 
 class CpuFeatures {
 public:
-  typedef uintptr_t BitWord;
+  typedef Globals::BitWord BitWord;
 
   enum {
     kMaxFeatures = 128,
-    kBitWordSize = static_cast<int>(sizeof(BitWord)) * 8,
+    kBitWordSize = Globals::kBitWordSize,
     kNumBitWords = kMaxFeatures / kBitWordSize
   };
 
@@ -118,7 +118,7 @@ public:
     kVendorVIA   = 3                     //!< VIA vendor.
   };
 
-  //! ARM/ARM64 CPU features.
+  //! ARM/ARM64 features.
   ASMJIT_ENUM(ArmFeatures) {
     kArmFeatureV6 = 1,                   //!< ARMv6 instruction set.
     kArmFeatureV7,                       //!< ARMv7 instruction set.
@@ -138,12 +138,12 @@ public:
     kArmFeaturePMULL,                    //!< CPU provides PMULL instructions (ARM64 only).
     kArmFeatureSHA1,                     //!< CPU provides SHA1 instructions.
     kArmFeatureSHA256,                   //!< CPU provides SHA256 instructions.
-    kArmFeatureAtomics64,                //!< CPU provides 64-bit load/store atomics (ARM64 only).
+    kArmFeatureATOMIC64,                 //!< CPU provides 64-bit load/store atomics (ARM64 only).
 
     kArmFeaturesCount                    //!< Count of ARM/ARM64 CPU features.
   };
 
-  //! X86/X64 CPU features.
+  //! X86/X64 features.
   ASMJIT_ENUM(X86Features) {
     kX86FeatureI486 = 1,                 //!< CPU is at least I486.
     kX86FeatureNX,                       //!< CPU has Not-Execute-Bit.
@@ -179,6 +179,7 @@ public:
     kX86FeatureSSE4_2,                   //!< CPU has SSE4.2.
     kX86FeatureMSSE,                     //!< CPU has Misaligned SSE (MSSE).
     kX86FeatureMONITOR,                  //!< CPU has MONITOR and MWAIT.
+    kX86FeatureMONITORX,                 //!< CPU has MONITORX and MWAITX.
     kX86FeatureMOVBE,                    //!< CPU has MOVBE.
     kX86FeaturePOPCNT,                   //!< CPU has POPCNT.
     kX86FeatureLZCNT,                    //!< CPU has LZCNT.
@@ -283,16 +284,14 @@ public:
     //! Get CPU vendor ID.
   ASMJIT_INLINE uint32_t getVendorId() const noexcept { return _vendorId; }
   //! Get CPU family ID.
-  ASMJIT_INLINE uint32_t getFamily() const noexcept { return _family; }
+  ASMJIT_INLINE uint32_t getFamilyId() const noexcept { return _familyId; }
   //! Get CPU model ID.
-  ASMJIT_INLINE uint32_t getModel() const noexcept { return _model; }
+  ASMJIT_INLINE uint32_t getModelId() const noexcept { return _modelId; }
   //! Get CPU stepping.
   ASMJIT_INLINE uint32_t getStepping() const noexcept { return _stepping; }
 
   //! Get number of hardware threads available.
-  ASMJIT_INLINE uint32_t getHwThreadsCount() const noexcept {
-    return _hwThreadsCount;
-  }
+  ASMJIT_INLINE uint32_t getHwThreadsCount() const noexcept { return _hwThreadsCount; }
 
   //! Get all CPU features.
   ASMJIT_INLINE const CpuFeatures& getFeatures() const noexcept { return _features; }
@@ -314,25 +313,14 @@ public:
   // [Accessors - X86]
   // --------------------------------------------------------------------------
 
-  //! Get processor type.
-  ASMJIT_INLINE uint32_t getX86ProcessorType() const noexcept {
-    return _x86Data._processorType;
-  }
-
-  //! Get brand index.
-  ASMJIT_INLINE uint32_t getX86BrandIndex() const noexcept {
-    return _x86Data._brandIndex;
-  }
-
-  //! Get flush cache line size.
-  ASMJIT_INLINE uint32_t getX86FlushCacheLineSize() const noexcept {
-    return _x86Data._flushCacheLineSize;
-  }
-
-  //! Get maximum logical processors count.
-  ASMJIT_INLINE uint32_t getX86MaxLogicalProcessors() const noexcept {
-    return _x86Data._maxLogicalProcessors;
-  }
+  //! Get CPU type.
+  ASMJIT_INLINE uint32_t getX86ProcessorType() const noexcept { return _x86Data._processorType; }
+  //! Get CPU brand index.
+  ASMJIT_INLINE uint32_t getX86BrandIndex() const noexcept { return _x86Data._brandIndex; }
+  //! Get the size of a cache line flush.
+  ASMJIT_INLINE uint32_t getX86FlushCacheLineSize() const noexcept { return _x86Data._flushCacheLineSize; }
+  //! Get the number of maximum logical processors.
+  ASMJIT_INLINE uint32_t getX86MaxLogicalProcessors() const noexcept { return _x86Data._maxLogicalProcessors; }
 
   // --------------------------------------------------------------------------
   // [Statics]
@@ -347,8 +335,8 @@ public:
 
   ArchInfo _archInfo;                    //!< CPU architecture information.
   uint32_t _vendorId;                    //!< CPU vendor id, see \ref Vendor.
-  uint32_t _family;                      //!< CPU family ID.
-  uint32_t _model;                       //!< CPU model ID.
+  uint32_t _familyId;                    //!< CPU family ID.
+  uint32_t _modelId;                     //!< CPU model ID.
   uint32_t _stepping;                    //!< CPU stepping.
   uint32_t _hwThreadsCount;              //!< Number of hardware threads.
   CpuFeatures _features;                 //!< CPU features.

@@ -11,10 +11,10 @@
 // [Dependencies]
 #include "../base/arch.h"
 #include "../base/func.h"
-#include "../base/logging.h"
+#include "../base/intutils.h"
 #include "../base/operand.h"
 #include "../base/simdtypes.h"
-#include "../base/utils.h"
+#include "../base/string.h"
 #include "../base/zone.h"
 
 // [Api-Begin]
@@ -32,6 +32,7 @@ namespace asmjit {
 class Assembler;
 class CodeEmitter;
 class CodeHolder;
+class Logger;
 
 // ============================================================================
 // [asmjit::AlignMode]
@@ -88,10 +89,10 @@ public:
   //!    to store the error because the exception changes execution path.
   //!
   //! 3. Using plain old C's `setjmp()` and `longjmp()`. Asmjit always puts
-  //!    `CodeEmitter` to a consistent state before calling the `handleError()`
+  //!    `CodeEmitter` to a consistent state before calling `handleError()`
   //!    so `longjmp()` can be used without any issues to cancel the code
   //!    generation if an error occurred. There is no difference between
-  //!    exceptions and longjmp() from AsmJit's perspective.
+  //!    exceptions and `longjmp()` from AsmJit's perspective.
   virtual bool handleError(Error err, const char* message, CodeEmitter* origin) = 0;
 };
 
@@ -173,16 +174,16 @@ public:
   //! Get a natural stack alignment that must be honored (or 0 if not known).
   ASMJIT_INLINE uint32_t getStackAlignment() const noexcept { return _stackAlignment; }
   //! Set a natural stack alignment that must be honored.
-  ASMJIT_INLINE void setStackAlignment(uint8_t sa) noexcept { _stackAlignment = static_cast<uint8_t>(sa); }
+  ASMJIT_INLINE void setStackAlignment(uint32_t sa) noexcept { _stackAlignment = IntUtils::toUInt8(sa); }
 
   ASMJIT_INLINE uint32_t getCdeclCallConv() const noexcept { return _cdeclCallConv; }
-  ASMJIT_INLINE void setCdeclCallConv(uint32_t cc) noexcept { _cdeclCallConv = static_cast<uint8_t>(cc); }
+  ASMJIT_INLINE void setCdeclCallConv(uint32_t cc) noexcept { _cdeclCallConv = IntUtils::toUInt8(cc); }
 
   ASMJIT_INLINE uint32_t getStdCallConv() const noexcept { return _stdCallConv; }
-  ASMJIT_INLINE void setStdCallConv(uint32_t cc) noexcept { _stdCallConv = static_cast<uint8_t>(cc); }
+  ASMJIT_INLINE void setStdCallConv(uint32_t cc) noexcept { _stdCallConv = IntUtils::toUInt8(cc); }
 
   ASMJIT_INLINE uint32_t getFastCallConv() const noexcept { return _fastCallConv; }
-  ASMJIT_INLINE void setFastCallConv(uint32_t cc) noexcept { _fastCallConv = static_cast<uint8_t>(cc); }
+  ASMJIT_INLINE void setFastCallConv(uint32_t cc) noexcept { _fastCallConv = IntUtils::toUInt8(cc); }
 
   // --------------------------------------------------------------------------
   // [Addressing Information]
@@ -281,12 +282,13 @@ public:
   ASMJIT_INLINE void _setDefaultName(
       char c0 = 0, char c1 = 0, char c2 = 0, char c3 = 0,
       char c4 = 0, char c5 = 0, char c6 = 0, char c7 = 0) noexcept {
-    _nameAsU32[0] = Utils::pack32_4x8(c0, c1, c2, c3);
-    _nameAsU32[1] = Utils::pack32_4x8(c4, c5, c6, c7);
+    _nameAsU32[0] = IntUtils::pack32_4x8(uint8_t(c0), uint8_t(c1), uint8_t(c2), uint8_t(c3));
+    _nameAsU32[1] = IntUtils::pack32_4x8(uint8_t(c4), uint8_t(c5), uint8_t(c6), uint8_t(c7));
   }
 
-  ASMJIT_INLINE uint32_t getFlags() const noexcept { return _flags; }
   ASMJIT_INLINE bool hasFlag(uint32_t flag) const noexcept { return (_flags & flag) != 0; }
+
+  ASMJIT_INLINE uint32_t getFlags() const noexcept { return _flags; }
   ASMJIT_INLINE void addFlags(uint32_t flags) noexcept { _flags |= flags; }
   ASMJIT_INLINE void clearFlags(uint32_t flags) noexcept { _flags &= ~flags; }
 
@@ -385,7 +387,7 @@ public:
   //! NOTE: Label name is always null terminated, so you can use `strlen()` to
   //! get it, however, it's also cached in `LabelEntry`, so if you want to know
   //! the length the easiest way is to use `LabelEntry::getNameLength()`.
-  ASMJIT_INLINE size_t getNameLength() const noexcept { return _name.getLength(); }
+  ASMJIT_INLINE uint32_t getNameLength() const noexcept { return _name.getLength(); }
 
   //! Get if the label is bound.
   ASMJIT_INLINE bool isBound() const noexcept { return _sectionId != SectionEntry::kInvalidId; }
@@ -402,10 +404,10 @@ public:
   // [Members]
   // ------------------------------------------------------------------------
 
-  // Let's round the size of `LabelEntry` to 64 bytes (as ZoneHeap has 32
-  // bytes granularity anyway). This gives `_name` the remaining space, which
-  // is roughly 16 bytes on 64-bit and 28 bytes on 32-bit architectures.
-  enum { kNameBytes = 64 - (sizeof(ZoneHashNode) + 16 + sizeof(intptr_t) + sizeof(LabelLink*)) };
+  // Let's round the size of `LabelEntry` to 64 bytes (as `ZoneAllocator` has
+  // granularity of 32 bytes anyway). This gives `_name` the remaining space,
+  // which is roughly 16 bytes on 64-bit and 28 bytes on 32-bit architectures.
+  enum { kStaticNameLength = 64 - (sizeof(ZoneHashNode) + 16 + sizeof(intptr_t) + sizeof(LabelLink*)) };
 
   uint8_t _type;                         //!< Label type, see Label::Type.
   uint8_t _flags;                        //!< Must be zero.
@@ -415,7 +417,7 @@ public:
   uint32_t _reserved32;                  //!< Reserved.
   intptr_t _offset;                      //!< Label offset.
   LabelLink* _links;                     //!< Label links.
-  SmallString<kNameBytes> _name;         //!< Label name.
+  SmallString<kStaticNameLength> _name;  //!< Label name.
 };
 
 // ============================================================================
@@ -515,7 +517,7 @@ public:
   // [Sync]
   // --------------------------------------------------------------------------
 
-  //! Synchronize all states of all `CodeEmitter`s associated with the CodeHolder.
+  //! Synchronize all states of all code emitters associated with the CodeHolder.
   //! This is required as some code generators don't sync every time they do
   //! something - for example \ref Assembler generally syncs when it needs to
   //! reallocate the \ref CodeBuffer, but not each time it encodes instruction
@@ -523,7 +525,14 @@ public:
   ASMJIT_API void sync() noexcept;
 
   // --------------------------------------------------------------------------
-  // [Code-Information]
+  // [Accessors]
+  // --------------------------------------------------------------------------
+
+  ASMJIT_INLINE ZoneAllocator* getAllocator() const noexcept { return const_cast<ZoneAllocator*>(&_allocator); }
+  ASMJIT_INLINE const ZoneVector<CodeEmitter*>& getEmitters() const noexcept { return _emitters; }
+
+  // --------------------------------------------------------------------------
+  // [Code / Arch]
   // --------------------------------------------------------------------------
 
   //! Get code/target information, see \ref CodeInfo.
@@ -542,13 +551,11 @@ public:
   ASMJIT_INLINE uint64_t getBaseAddress() const noexcept { return _codeInfo.getBaseAddress(); }
 
   // --------------------------------------------------------------------------
-  // [Global Information]
+  // [Emitter Options]
   // --------------------------------------------------------------------------
 
-  //! Get global hints, internally propagated to all `CodeEmitter`s attached.
-  ASMJIT_INLINE uint32_t getGlobalHints() const noexcept { return _globalHints; }
-  //! Get global options, internally propagated to all `CodeEmitter`s attached.
-  ASMJIT_INLINE uint32_t getGlobalOptions() const noexcept { return _globalOptions; }
+  //! Get global hints, internally propagated to all code emitters attached.
+  ASMJIT_INLINE uint32_t getEmitterOptions() const noexcept { return _emitterOptions; }
 
   // --------------------------------------------------------------------------
   // [Result Information]
@@ -569,24 +576,22 @@ public:
   // [Logging & Error Handling]
   // --------------------------------------------------------------------------
 
-#if !defined(ASMJIT_DISABLE_LOGGING)
   //! Get if a logger attached.
   ASMJIT_INLINE bool hasLogger() const noexcept { return _logger != nullptr; }
   //! Get the attached logger.
   ASMJIT_INLINE Logger* getLogger() const noexcept { return _logger; }
-  //! Attach a `logger` to CodeHolder and propagate it to all attached `CodeEmitter`s.
+  //! Attach a `logger` to CodeHolder and propagate it to all attached code emitters.
   ASMJIT_API void setLogger(Logger* logger) noexcept;
   //! Reset the logger (does nothing if not attached).
   ASMJIT_INLINE void resetLogger() noexcept { setLogger(nullptr); }
-#endif // !ASMJIT_DISABLE_LOGGING
 
-  //! Get if error-handler is attached.
+  //! Get if the global error handler is attached.
   ASMJIT_INLINE bool hasErrorHandler() const noexcept { return _errorHandler != nullptr; }
-  //! Get the error-handler.
+  //! Get the global error handler.
   ASMJIT_INLINE ErrorHandler* getErrorHandler() const noexcept { return _errorHandler; }
-  //! Set the error handler, will affect all attached `CodeEmitter`s.
-  ASMJIT_API Error setErrorHandler(ErrorHandler* handler) noexcept;
-  //! Reset the error handler (does nothing if not attached).
+  //! Set the global error handler.
+  ASMJIT_INLINE void setErrorHandler(ErrorHandler* handler) noexcept { _errorHandler = handler; }
+  //! Reset the global error handler (does nothing if not attached).
   ASMJIT_INLINE void resetErrorHandler() noexcept { setErrorHandler(nullptr); }
 
   // --------------------------------------------------------------------------
@@ -595,9 +600,10 @@ public:
 
   //! Get array of `SectionEntry*` records.
   ASMJIT_INLINE const ZoneVector<SectionEntry*>& getSections() const noexcept { return _sections; }
-
+  //! Get the number of sections.
+  ASMJIT_INLINE uint32_t getNumSections() const noexcept { return _sections.getLength(); }
   //! Get a section entry of the given index.
-  ASMJIT_INLINE SectionEntry* getSectionEntry(size_t index) const noexcept { return _sections[index]; }
+  ASMJIT_INLINE SectionEntry* getSectionEntry(uint32_t index) const noexcept { return _sections[index]; }
 
   ASMJIT_API Error growBuffer(CodeBuffer* cb, size_t n) noexcept;
   ASMJIT_API Error reserveBuffer(CodeBuffer* cb, size_t n) noexcept;
@@ -617,7 +623,7 @@ public:
   ASMJIT_API Error newNamedLabelId(uint32_t& idOut, const char* name, size_t nameLength, uint32_t type, uint32_t parentId) noexcept;
 
   //! Get a label id by name.
-  ASMJIT_API uint32_t getLabelIdByName(const char* name, size_t nameLength = Globals::kInvalidIndex, uint32_t parentId = 0) noexcept;
+  ASMJIT_API uint32_t getLabelIdByName(const char* name, size_t nameLength = Globals::kNullTerminated, uint32_t parentId = 0) noexcept;
 
   //! Create a new label-link used to store information about yet unbound labels.
   //!
@@ -625,13 +631,13 @@ public:
   ASMJIT_API LabelLink* newLabelLink(LabelEntry* le, uint32_t sectionId, size_t offset, intptr_t rel) noexcept;
 
   //! Get array of `LabelEntry*` records.
-  ASMJIT_INLINE const ZoneVector<LabelEntry*>& getLabelEntries() const noexcept { return _labels; }
+  ASMJIT_INLINE const ZoneVector<LabelEntry*>& getLabelEntries() const noexcept { return _labelEntries; }
 
   //! Get number of labels created.
-  ASMJIT_INLINE size_t getLabelsCount() const noexcept { return _labels.getLength(); }
+  ASMJIT_INLINE uint32_t getLabelCount() const noexcept { return _labelEntries.getLength(); }
 
   //! Get number of label references, which are unresolved at the moment.
-  ASMJIT_INLINE size_t getUnresolvedLabelsCount() const noexcept { return _unresolvedLabelsCount; }
+  ASMJIT_INLINE uint32_t getUnresolvedLabelCount() const noexcept { return _unresolvedLabelCount; }
 
   //! Get if the `label` is valid (i.e. created by `newLabelId()`).
   ASMJIT_INLINE bool isLabelValid(const Label& label) const noexcept {
@@ -639,8 +645,8 @@ public:
   }
   //! Get if the label having `id` is valid (i.e. created by `newLabelId()`).
   ASMJIT_INLINE bool isLabelValid(uint32_t labelId) const noexcept {
-    size_t index = Operand::unpackId(labelId);
-    return index < _labels.getLength();
+    uint32_t index = Operand::unpackId(labelId);
+    return index < _labelEntries.getLength();
   }
 
   //! Get if the `label` is already bound.
@@ -651,8 +657,8 @@ public:
   }
   //! \overload
   ASMJIT_INLINE bool isLabelBound(uint32_t id) const noexcept {
-    size_t index = Operand::unpackId(id);
-    return index < _labels.getLength() && _labels[index]->isBound();
+    uint32_t index = Operand::unpackId(id);
+    return index < _labelEntries.getLength() && _labelEntries[index]->isBound();
   }
 
   //! Get a `label` offset or -1 if the label is not yet bound.
@@ -662,7 +668,7 @@ public:
   //! \overload
   ASMJIT_INLINE intptr_t getLabelOffset(uint32_t id) const noexcept {
     ASMJIT_ASSERT(isLabelValid(id));
-    return _labels[Operand::unpackId(id)]->getOffset();
+    return _labelEntries[Operand::unpackId(id)]->getOffset();
   }
 
   //! Get information about the given `label`.
@@ -671,23 +677,23 @@ public:
   }
   //! Get information about a label having the given `id`.
   ASMJIT_INLINE LabelEntry* getLabelEntry(uint32_t id) const noexcept {
-    size_t index = static_cast<size_t>(Operand::unpackId(id));
-    return index < _labels.getLength() ? _labels[index] : static_cast<LabelEntry*>(nullptr);
+    uint32_t index = Operand::unpackId(id);
+    return index < _labelEntries.getLength() ? _labelEntries[index] : static_cast<LabelEntry*>(nullptr);
   }
 
   // --------------------------------------------------------------------------
   // [Relocations]
   // --------------------------------------------------------------------------
 
+  //! Get if the code contains relocation entries.
+  ASMJIT_INLINE bool hasRelocEntries() const noexcept { return !_relocations.isEmpty(); }
+  //! Get array of `RelocEntry*` records.
+  ASMJIT_INLINE const ZoneVector<RelocEntry*>& getRelocEntries() const noexcept { return _relocations; }
+
   //! Create a new relocation entry of type `type` and size `size`.
   //!
   //! Additional fields can be set after the relocation entry was created.
   ASMJIT_API Error newRelocEntry(RelocEntry** dst, uint32_t type, uint32_t size) noexcept;
-
-  //! Get if the code contains relocations.
-  ASMJIT_INLINE bool hasRelocations() const noexcept { return !_relocations.isEmpty(); }
-  //! Get array of `RelocEntry*` records.
-  ASMJIT_INLINE const ZoneVector<RelocEntry*>& getRelocEntries() const noexcept { return _relocations; }
 
   ASMJIT_INLINE RelocEntry* getRelocEntry(uint32_t id) const noexcept { return _relocations[id]; }
 
@@ -700,7 +706,7 @@ public:
   //! \param baseAddress Base address used for relocation. `JitRuntime` always
   //! sets the `baseAddress` to be the same as `dst`.
   //!
-  //! \return The number bytes actually used. If the code emitter reserved
+  //! \return The number of bytes actually used. If the code emitter reserved
   //! space for possible trampolines, but didn't use it, the number of bytes
   //! used can actually be less than the expected worst case. Virtual memory
   //! allocator can shrink the memory it allocated initially.
@@ -714,25 +720,20 @@ public:
   // --------------------------------------------------------------------------
 
   CodeInfo _codeInfo;                    //!< Basic information about the code (architecture and other info).
-
-  uint32_t _globalHints;                 //!< Global hints, propagated to all `CodeEmitter`s.
-  uint32_t _globalOptions;               //!< Global options, propagated to all `CodeEmitter`s.
-
-  CodeEmitter* _emitters;                //!< Linked-list of all attached `CodeEmitter`s.
-  Assembler* _cgAsm;                     //!< Attached \ref Assembler (only one at a time).
+  uint32_t _emitterOptions;              //!< Emitter options, propagated to all emitters when changed.
 
   Logger* _logger;                       //!< Attached \ref Logger, used by all consumers.
   ErrorHandler* _errorHandler;           //!< Attached \ref ErrorHandler.
 
-  uint32_t _unresolvedLabelsCount;       //!< Count of label references which were not resolved.
+  uint32_t _unresolvedLabelCount;        //!< Count of label references which were not resolved.
   uint32_t _trampolinesSize;             //!< Size of all possible trampolines.
 
-  Zone _baseZone;                        //!< Base zone (used to allocate core structures).
-  Zone _dataZone;                        //!< Data zone (used to allocate extra data like label names).
-  ZoneHeap _baseHeap;                    //!< Zone allocator, used to manage internal containers.
+  Zone _zone;                            //!< Code zone (used to allocate core structures).
+  ZoneAllocator _allocator;              //!< Zone allocator, used to manage internal containers.
 
+  ZoneVector<CodeEmitter*> _emitters;    //!< Attached code emitters.
   ZoneVector<SectionEntry*> _sections;   //!< Section entries.
-  ZoneVector<LabelEntry*> _labels;       //!< Label entries (each label is stored here).
+  ZoneVector<LabelEntry*> _labelEntries; //!< Label entries.
   ZoneVector<RelocEntry*> _relocations;  //!< Relocation entries.
   ZoneHash<LabelEntry> _namedLabels;     //!< Label name -> LabelEntry (only named labels).
 };

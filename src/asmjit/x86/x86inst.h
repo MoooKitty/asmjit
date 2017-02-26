@@ -1499,6 +1499,7 @@ struct X86Inst {
     kEncodingX86Bt,                      //!< X86 bt, btc, btr, bts.
     kEncodingX86Call,                    //!< X86 call.
     kEncodingX86Cmpxchg,                 //!< X86 [MR] cmpxchg.
+    kEncodingX86Cmpxchg8b_16b,           //!< X86 [MR] cmpxchg8b, cmpxchg16b.
     kEncodingX86Crc,                     //!< X86 crc32.
     kEncodingX86Enter,                   //!< X86 enter.
     kEncodingX86Imul,                    //!< X86 imul.
@@ -1679,6 +1680,8 @@ struct X86Inst {
   //! values defined by these enums many cause AsmJit to emit invalid binary
   //! representations of instructions passed to `X86Assembler::_emit`.
   ASMJIT_ENUM(OpCodeBits) {
+    kOpCode_0 = 0,
+
     // MM & VEX & EVEX & XOP
     // ---------------------
     //
@@ -1763,7 +1766,7 @@ struct X86Inst {
     // Compressed displacement tuple-type (specific to AsmJit).
     //
     // Since we store the base offset independently of CDTT we can simplify the
-    // number of 'TUPLE_TYPE' kinds significantly and just handle special cases.
+    // number of 'TUPLE_TYPE' groups significantly and just handle special cases.
     kOpCode_CDTT_Shift    = 16,
     kOpCode_CDTT_Mask     = 0x3 << kOpCode_CDTT_Shift,
     kOpCode_CDTT_None     = 0x0 << kOpCode_CDTT_Shift, // Does nothing.
@@ -1928,7 +1931,7 @@ struct X86Inst {
     // to decide whether to emit VEX or EVEX prefix.
 
     kFlagAvx512_          = 0x00000000U, //!< Internally used in tables, has no meaning.
-    kFlagAvx512K          = 0x01000000U, //!< Supports masking {k0..k7}.
+    kFlagAvx512K          = 0x01000000U, //!< Supports masking {k1..k7}.
     kFlagAvx512Z          = 0x02000000U, //!< Supports zeroing {z}, must be used together with `kAvx512k`.
     kFlagAvx512ER         = 0x04000000U, //!< Supports 'embedded-rounding' {er} with implicit {sae},
     kFlagAvx512SAE        = 0x08000000U, //!< Supports 'suppress-all-exceptions' {sae}.
@@ -1956,8 +1959,9 @@ struct X86Inst {
   //! Used to describe what the instruction does and some of its quirks.
   enum OperationFlags {
     kOperationMovCrDr      = 0x00000001U, //!< `MOV REG <-> CREG|DREG` - OS|SF|ZF|AF|PF|CF flags are undefined.
-    kOperationMovSsSd      = 0x00000002U, //!< `MOVSS|MOVSD XMM, [MEM]` - Sestination operand is completely overwritten.
+    kOperationMovSsSd      = 0x00000002U, //!< `MOVSS|MOVSD XMM, [MEM]` - Destination operand is completely overwritten.
 
+    kOperationScalar       = 0x00000004U, //!< Instruction uses vector register but performs scalar operation (FP mostly).
     kOperationPrefetch     = 0x10000000U, //!< Instruction does hardware prefetch.
     kOperationBarrier      = 0x20000000U, //!< Instruction acts as a barrier / fence.
     kOperationVolatile     = 0x40000000U, //!< Hint for instruction schedulers to never reorder this instruction (side effects, memory barrier, etc).
@@ -1975,14 +1979,14 @@ struct X86Inst {
 
   //! Instruction options (AsmJit specific).
   ASMJIT_ENUM(Options) {
-    // NOTE: Don't collide with reserved bits used by CodeEmitter (0x0000003F).
-    kOptionOp4Op5Used     = CodeEmitter::kOptionOp4Op5Used,
+    kOptionReserved       = Inst::kOptionReserved,
+    kOptionOp4Op5Used     = Inst::kOptionOp4Op5Used,
 
-    kOptionShortForm      = 0x00000040U, //!< Emit short-form of the instruction.
-    kOptionLongForm       = 0x00000080U, //!< Emit long-form of the instruction.
+    kOptionShortForm      = Inst::kOptionShortForm,
+    kOptionLongForm       = Inst::kOptionLongForm,
 
-    kOptionTaken          = 0x00000100U, //!< Conditional jump is likely to be taken.
-    kOptionNotTaken       = 0x00000200U, //!< Conditional jump is unlikely to be taken.
+    kOptionTaken          = Inst::kOptionTaken,
+    kOptionNotTaken       = Inst::kOptionNotTaken,
 
     kOptionVex3           = 0x00000400U, //!< Use 3-byte VEX prefix if possible (AVX) (must be 0x00000400).
     kOptionModMR          = 0x00000800U, //!< Use ModMR instead of ModRM when it's available.
@@ -1995,8 +1999,8 @@ struct X86Inst {
     kOptionXAcquire       = 0x00010000U, //!< XACQUIRE prefix (only allowed instructions).
     kOptionXRelease       = 0x00020000U, //!< XRELEASE prefix (only allowed instructions).
 
-    kOptionER             = 0x00040000U, //!< AVX-512: 'embedded-rounding' {er} and {sae}.
-    kOptionSAE            = 0x00080000U, //!< AVX-512: 'suppress-all-exceptions' {sae}.
+    kOptionER             = 0x00040000U, //!< AVX-512: embedded-rounding {er} and implicit {sae}.
+    kOptionSAE            = 0x00080000U, //!< AVX-512: suppress-all-exceptions {sae}.
     kOption1ToX           = 0x00100000U, //!< AVX-512: broadcast the first element to all {1tox}.
     kOptionRN_SAE         = 0x00000000U, //!< AVX-512: round-to-nearest (even)      {rn-sae} (bits 00).
     kOptionRD_SAE         = 0x00200000U, //!< AVX-512: round-down (toward -inf)     {rd-sae} (bits 01).
@@ -2116,7 +2120,7 @@ struct X86Inst {
   //! Operand signature, used by \ref ISignature.
   //!
   //! Contains all possible operand combinations, memory size information,
-  //! and register index (or \ref Globals::kInvalidRegId if not mandatory).
+  //! and register id (or \ref Reg::kIdBad if not mandatory).
   struct OSignature {
     uint32_t flags;                      //!< Operand flags.
     uint16_t memFlags;                   //!< Memory flags.
@@ -2240,6 +2244,7 @@ struct X86Inst {
     ASMJIT_INLINE bool isMovCrDr() const noexcept { return hasOperationFlag(kOperationMovCrDr); }
     ASMJIT_INLINE bool isMovSsSd() const noexcept { return hasOperationFlag(kOperationMovSsSd); }
 
+    ASMJIT_INLINE bool isScalar() const noexcept { return hasOperationFlag(kOperationScalar); }
     ASMJIT_INLINE bool isPrefetch() const noexcept { return hasOperationFlag(kOperationPrefetch); }
     ASMJIT_INLINE bool isBarrier() const noexcept { return hasOperationFlag(kOperationBarrier); }
     ASMJIT_INLINE bool isVolatile() const noexcept { return hasOperationFlag(kOperationVolatile); }
@@ -2449,11 +2454,11 @@ struct X86Inst {
   //! match. If there is an exact match the instruction id is returned, otherwise
   //! `kInvalidInstId` (zero) is returned instead. The given `name` doesn't have
   //! to be null-terminated if `len` is provided.
-  ASMJIT_API static uint32_t getIdByName(const char* name, size_t len = Globals::kInvalidIndex) noexcept;
+  ASMJIT_API static uint32_t getIdByName(const char* name, size_t len = Globals::kNullTerminated) noexcept;
 
   //! Get an instruction name from a given instruction id `instId`.
   ASMJIT_API static const char* getNameById(uint32_t instId) noexcept;
-#endif // !ASMJIT_DISABLE_TEXT
+#endif
 
   // --------------------------------------------------------------------------
   // [Members]
@@ -2483,7 +2488,7 @@ struct X86InstDB {
 #if !defined(ASMJIT_DISABLE_VALIDATION)
   ASMJIT_API static const X86Inst::ISignature iSignatureData[];
   ASMJIT_API static const X86Inst::OSignature oSignatureData[];
-#endif // ASMJIT_DISABLE_VALIDATION
+#endif
 };
 
 ASMJIT_INLINE const X86Inst& X86Inst::getInst(uint32_t instId) noexcept {
@@ -2504,7 +2509,7 @@ ASMJIT_INLINE const X86Inst::ISignature* X86Inst::CommonData::getISignatureEnd()
 #else
 ASMJIT_INLINE const X86Inst::ISignature* X86Inst::CommonData::getISignatureData() const noexcept { return static_cast<const X86Inst::ISignature*>(nullptr); }
 ASMJIT_INLINE const X86Inst::ISignature* X86Inst::CommonData::getISignatureEnd() const noexcept { return static_cast<const X86Inst::ISignature*>(nullptr); }
-#endif // ASMJIT_DISABLE_VALIDATION
+#endif
 
 //! \}
 
